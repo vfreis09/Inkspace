@@ -1,41 +1,57 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
+# Dependencies
+node_modules/
 /.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+.pnp.js
 
-# testing
-/coverage
+# Next.js Build Output
+.next/
+out/
+build/
 
-# next.js
-/.next/
-/out/
+# Environment Variables (CRITICAL)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env.local
 
-# production
-/build
+# Prisma
+/prisma/migrations/
+# Keep the schema, but ignore the local sqlite db if you ever use it for testing
+*.db
+*.db-journal
 
-# misc
-.DS_Store
-*.pem
+# Partykit & Real-time
+.partykit/
+dist/
 
-# debug
+# Testing
+coverage/
+.nyc_output/
+
+# Tooling & Linting
+.eslintcache
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# OS Files
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# vercel
+# Vercel & Deployment
 .vercel
+*.vercel.pnpm-debug.log
 
-# typescript
+# TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Tldraw/Canvas Snapshots (Local backups/logs)
+*.tldr
