@@ -6,22 +6,21 @@ A production-grade collaborative canvas application where multiple users can dra
 
 ## 🎯 What It Is
 
-Inkspace is a web-based infinite canvas tool similar to Figma, Miro, or Excalidraw. Users can:
+Inkspace is a web-based infinite canvas tool built from the ground up to handle complex real-time interactions. Unlike wrapper-based solutions, Inkspace implements its own rendering logic to ensure maximum control over the user experience.
 
-- Draw shapes, lines, and free-hand sketches
-- Collaborate in real-time with multiple users
-- See live cursors and presence indicators
-- Share boards with view/edit permissions
-- Export creations as PNG/SVG/PDF
-- Comment and annotate on the canvas
+- Custom Drawing Engine: Built on HTML5 Canvas for high-performance rendering.
+- Multiplayer Sync: Real-time collaboration with conflict-free data synchronization.
+- Presence: Live cursors and user activity indicators.
+- Infinite Canvas: Advanced panning and zooming capabilities.
+- State Management: Robust undo/redo and shape serialization.
 
 ## 🚀 Tech Stack
 
 ### Frontend
 
-- **Next.js 14** (App Router) - React framework with SSR and API routes
+- **Next.js 16** (App Router) - React framework with SSR and API routes
 - **TypeScript** - Type-safe development
-- **Tldraw** - Open-source infinite canvas library (core rendering engine)
+- **Konva.js** - 2D Canvas framework used to build the custom rendering engine.
 - **Zustand** - Lightweight state management
 - **TailwindCSS** - Utility-first styling
 - **Shadcn/ui** - Accessible component library
@@ -35,7 +34,7 @@ Inkspace is a web-based infinite canvas tool similar to Figma, Miro, or Excalidr
 ### Real-Time
 
 - **Partykit** - WebSocket infrastructure for real-time collaboration
-- **Yjs** (via Tldraw) - CRDT for conflict-free multiplayer sync
+- **Yjs** - CRDT for conflict-free multiplayer sync
 
 ### Auth
 
@@ -49,6 +48,14 @@ Inkspace is a web-based infinite canvas tool similar to Figma, Miro, or Excalidr
 
 - **Vercel** - Frontend and API hosting
 - **Partykit** - Real-time server hosting
+
+## 🏗️ Project Architecture
+
+Inkspace uses a Layered Canvas Architecture to optimize performance:
+
+- The Grid Layer: Constant reference for infinite panning.
+- The Interaction Layer: Handles active selections and transformations.
+- The Sync Layer: Manages Yjs updates and Partykit WebSocket broadcasts.
 
 ## 🎯 Core Features
 
