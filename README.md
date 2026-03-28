@@ -116,4 +116,4 @@ This is a portfolio project, but feedback and suggestions are welcome!
 
 ---
 
-**Built by [Your Name]** | [Portfolio](https://vfreis09.github.io/) | [LinkedIn](https://www.linkedin.com/in/vicente-fernandes-339005155/)
+**Built by Vicente Fernandes** | [Portfolio](https://vfreis09.github.io/) | [LinkedIn](https://www.linkedin.com/in/vicente-fernandes-339005155/)
