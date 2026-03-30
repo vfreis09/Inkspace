@@ -1,36 +1,48 @@
 import { create } from "zustand";
 
+export type ShapeType = "rect" | "circle" | "line" | "arrow";
+export type Tool = "select" | "rect" | "circle" | "line" | "arrow" | "pan";
+
 export type Shape = {
   id: string;
-  type: "rect" | "circle";
+  type: ShapeType;
   x: number;
   y: number;
   width: number;
   height: number;
   fill: string;
+  stroke?: string;
+  strokeWidth?: number;
+  points?: number[];
 };
 
 interface CanvasState {
   shapes: Shape[];
-  addShape: (type: "rect" | "circle", x: number, y: number) => void;
+  currentTool: Tool;
+  isDrawing: boolean;
+
+  setTool: (tool: Tool) => void;
+  setIsDrawing: (drawing: boolean) => void;
+  addShape: (shape: Omit<Shape, "id">) => void;
   updateShape: (id: string, newProps: Partial<Shape>) => void;
+  deleteShape: (id: string) => void;
 }
 
 export const useStore = create<CanvasState>((set) => ({
   shapes: [],
+  currentTool: "select",
+  isDrawing: false,
 
-  addShape: (type, x, y) =>
+  setTool: (tool) => set({ currentTool: tool }),
+  setIsDrawing: (drawing) => set({ isDrawing: drawing }),
+
+  addShape: (shape) =>
     set((state) => ({
       shapes: [
         ...state.shapes,
         {
+          ...shape,
           id: Math.random().toString(36).substr(2, 9),
-          type,
-          x,
-          y,
-          width: 100,
-          height: 100,
-          fill: "#6366f1",
         },
       ],
     })),
@@ -40,5 +52,10 @@ export const useStore = create<CanvasState>((set) => ({
       shapes: state.shapes.map((s) =>
         s.id === id ? { ...s, ...newProps } : s,
       ),
+    })),
+
+  deleteShape: (id) =>
+    set((state) => ({
+      shapes: state.shapes.filter((s) => s.id !== id),
     })),
 }));

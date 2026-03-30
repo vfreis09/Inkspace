@@ -1,7 +1,9 @@
 "use client";
-import { Stage, Layer, Rect } from "react-konva";
-import { useState, useEffect, useMemo } from "react";
+
+import { Stage, Layer, Rect, Circle, Line, Arrow, Ellipse } from "react-konva";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useStore } from "@/store/useStore";
+import type { Shape } from "@/store/useStore";
 
 export default function Canvas() {
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
@@ -10,9 +12,19 @@ export default function Canvas() {
   );
   const [size, setSize] = useState({ width: 0, height: 0 });
 
-  const shapes = useStore((state: any) => state.shapes);
-  const addShape = useStore((state: any) => state.addShape);
-  const updateShape = useStore((state: any) => state.updateShape);
+  const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const [currentShape, setCurrentShape] = useState<Partial<Shape> | null>(null);
+
+  const shapes = useStore((state) => state.shapes);
+  const addShape = useStore((state) => state.addShape);
+  const updateShape = useStore((state) => state.updateShape);
+  const currentTool = useStore((state) => state.currentTool);
+  const isDrawing = useStore((state) => state.isDrawing);
+  const setIsDrawing = useStore((state) => state.setIsDrawing);
+
+  const stageRef = useRef<any>(null);
 
   useEffect(() => {
     const checkSize = () => {
@@ -53,6 +65,23 @@ export default function Canvas() {
     return pow;
   }, [camera.scale]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      const setTool = useStore.getState().setTool;
+
+      if (key === "v") setTool("select");
+      if (key === "r") setTool("rect");
+      if (key === "o") setTool("circle");
+      if (key === "l") setTool("line");
+      if (key === "a") setTool("arrow");
+      if (key === "h") setTool("pan");
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const handleWheel = (e: any) => {
     e.evt.preventDefault();
     const scaleBy = 1.1;
@@ -75,28 +104,220 @@ export default function Canvas() {
     });
   };
 
-  const handleStageClick = (e: any) => {
-    if (e.target !== e.target.getStage()) return;
-    if (e.target.getStage().isDragging()) return;
-
-    const stage = e.target.getStage();
+  const getPointerPosition = (stage: any) => {
     const transform = stage.getAbsoluteTransform().copy().invert();
     const pos = transform.point(stage.getPointerPosition());
+    return pos;
+  };
 
-    addShape("rect", pos.x, pos.y);
+  const handleMouseDown = (e: any) => {
+    if (e.target !== e.target.getStage()) return;
+
+    const stage = e.target.getStage();
+    const pos = getPointerPosition(stage);
+
+    if (["rect", "circle", "line", "arrow"].includes(currentTool)) {
+      setIsDrawing(true);
+      setDrawStart(pos);
+      setCurrentShape({
+        type: currentTool as any,
+        x: pos.x,
+        y: pos.y,
+        width: 0,
+        height: 0,
+        fill:
+          currentTool === "rect" || currentTool === "circle"
+            ? "#6366f1"
+            : "transparent",
+        stroke:
+          currentTool === "line" || currentTool === "arrow"
+            ? "#6366f1"
+            : undefined,
+        strokeWidth:
+          currentTool === "line" || currentTool === "arrow" ? 3 : undefined,
+        points:
+          currentTool === "line" || currentTool === "arrow"
+            ? [0, 0, 0, 0]
+            : undefined,
+      });
+    }
+  };
+
+  const handleMouseMove = (e: any) => {
+    if (!isDrawing || !drawStart || !currentShape) return;
+
+    const stage = e.target.getStage();
+    const pos = getPointerPosition(stage);
+
+    if (currentTool === "rect" || currentTool === "circle") {
+      const width = pos.x - drawStart.x;
+      const height = pos.y - drawStart.y;
+
+      setCurrentShape({
+        ...currentShape,
+        width: Math.abs(width),
+        height: Math.abs(height),
+        x: width < 0 ? pos.x : drawStart.x,
+        y: height < 0 ? pos.y : drawStart.y,
+      });
+    } else if (currentTool === "line" || currentTool === "arrow") {
+      const dx = pos.x - drawStart.x;
+      const dy = pos.y - drawStart.y;
+
+      setCurrentShape({
+        ...currentShape,
+        points: [0, 0, dx, dy],
+      });
+    }
+  };
+
+  const handleMouseUp = (e: any) => {
+    if (!isDrawing || !currentShape) return;
+
+    const minThreshold = 5 / camera.scale;
+
+    if (currentTool === "rect" || currentTool === "circle") {
+      if (
+        currentShape.width &&
+        currentShape.height &&
+        currentShape.width > minThreshold &&
+        currentShape.height > minThreshold
+      ) {
+        addShape(currentShape as Omit<Shape, "id">);
+      }
+    } else if (currentTool === "line" || currentTool === "arrow") {
+      const points = currentShape.points || [0, 0, 0, 0];
+      const distance = Math.sqrt(points[2] ** 2 + points[3] ** 2);
+
+      if (distance > minThreshold) {
+        addShape(currentShape as Omit<Shape, "id">);
+      }
+    }
+
+    setIsDrawing(false);
+    setDrawStart(null);
+    setCurrentShape(null);
+  };
+
+  const renderShape = (shape: Shape, isTemp = false) => {
+    const shapeKey = isTemp ? "temp-shape" : shape.id;
+
+    const commonProps = {
+      draggable: !isTemp && currentTool === "select",
+      onDragEnd: (e: any) => {
+        if (!isTemp) {
+          updateShape(shape.id, {
+            x: e.target.x(),
+            y: e.target.y(),
+          });
+        }
+      },
+      onMouseEnter: (e: any) => {
+        const container = e.target.getStage()?.container();
+        if (container && currentTool === "select") {
+          container.style.cursor = "grab";
+        }
+      },
+      onMouseLeave: (e: any) => {
+        const container = e.target.getStage()?.container();
+        if (container) container.style.cursor = "default";
+      },
+    };
+
+    if (shape.type === "rect") {
+      return (
+        <Rect
+          key={shapeKey}
+          {...commonProps}
+          x={shape.x}
+          y={shape.y}
+          width={shape.width}
+          height={shape.height}
+          fill={shape.fill}
+          cornerRadius={4 / camera.scale}
+          opacity={isTemp ? 0.5 : 1}
+        />
+      );
+    }
+
+    if (shape.type === "circle") {
+      return (
+        <Circle
+          key={shapeKey}
+          {...commonProps}
+          x={shape.x}
+          y={shape.y}
+          radius={Math.abs(shape.width / 2)}
+          fill={shape.fill}
+          stroke={shape.stroke}
+          strokeWidth={shape.strokeWidth}
+          opacity={isTemp ? 0.5 : 1}
+          offsetX={-(shape.width / 2)}
+          offsetY={-(shape.height / 2)}
+        />
+      );
+    }
+
+    if (shape.type === "line") {
+      return (
+        <Line
+          key={shapeKey}
+          {...commonProps}
+          x={shape.x}
+          y={shape.y}
+          points={shape.points || [0, 0, 0, 0]}
+          stroke={shape.stroke}
+          strokeWidth={
+            shape.strokeWidth
+              ? shape.strokeWidth / camera.scale
+              : 3 / camera.scale
+          }
+          lineCap="round"
+          lineJoin="round"
+          opacity={isTemp ? 0.5 : 1}
+        />
+      );
+    }
+
+    if (shape.type === "arrow") {
+      return (
+        <Arrow
+          key={shapeKey}
+          {...commonProps}
+          x={shape.x}
+          y={shape.y}
+          points={shape.points || [0, 0, 0, 0]}
+          stroke={shape.stroke}
+          strokeWidth={3 / camera.scale}
+          fill={shape.stroke}
+          lineCap="round"
+          lineJoin="round"
+          pointerLength={10 / camera.scale}
+          pointerWidth={10 / camera.scale}
+          opacity={isTemp ? 0.5 : 1}
+        />
+      );
+    }
+
+    return null;
   };
 
   return (
     <Stage
+      ref={stageRef}
       width={size.width}
       height={size.height}
-      draggable
+      draggable={
+        currentTool === "pan" || (currentTool === "select" && !isDrawing)
+      }
       x={camera.x}
       y={camera.y}
       scaleX={camera.scale}
       scaleY={camera.scale}
       onWheel={handleWheel}
-      onClick={handleStageClick}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
       onDragEnd={(e) => {
         if (e.target === e.target.getStage()) {
           setCamera({
@@ -125,33 +346,8 @@ export default function Canvas() {
             listening={false}
           />
         )}
-
-        {shapes.map((shape: any) => (
-          <Rect
-            key={shape.id}
-            x={shape.x}
-            y={shape.y}
-            width={shape.width}
-            height={shape.height}
-            fill="#4f46e5"
-            cornerRadius={4}
-            draggable
-            onDragEnd={(e) => {
-              updateShape(shape.id, {
-                x: e.target.x(),
-                y: e.target.y(),
-              });
-            }}
-            onMouseEnter={(e) => {
-              const container = e.target.getStage()?.container();
-              if (container) container.style.cursor = "grab";
-            }}
-            onMouseLeave={(e) => {
-              const container = e.target.getStage()?.container();
-              if (container) container.style.cursor = "default";
-            }}
-          />
-        ))}
+        {shapes.map((shape) => renderShape(shape))}
+        {isDrawing && currentShape && renderShape(currentShape as Shape, true)}
       </Layer>
     </Stage>
   );
