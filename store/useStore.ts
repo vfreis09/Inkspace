@@ -26,6 +26,8 @@ interface CanvasState {
   addShape: (shape: Omit<Shape, "id">) => void;
   updateShape: (id: string, newProps: Partial<Shape>) => void;
   deleteShape: (id: string) => void;
+  selectedId: string | null;
+  selectShape: (id: string | null) => void;
 }
 
 export const useStore = create<CanvasState>((set) => ({
@@ -58,4 +60,7 @@ export const useStore = create<CanvasState>((set) => ({
     set((state) => ({
       shapes: state.shapes.filter((s) => s.id !== id),
     })),
+  selectedId: null,
+
+  selectShape: (id) => set({ selectedId: id }),
 }));

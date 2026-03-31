@@ -1,6 +1,14 @@
 "use client";
 
-import { Stage, Layer, Rect, Circle, Line, Arrow, Ellipse } from "react-konva";
+import {
+  Stage,
+  Layer,
+  Rect,
+  Circle,
+  Line,
+  Arrow,
+  Transformer,
+} from "react-konva";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useStore } from "@/store/useStore";
 import type { Shape } from "@/store/useStore";
@@ -10,6 +18,9 @@ export default function Canvas() {
   const [gridImage, setGridImage] = useState<HTMLImageElement | undefined>(
     undefined,
   );
+  const trRef = useRef<any>(null);
+  const selectedId = useStore((state) => state.selectedId);
+  const selectShape = useStore((state) => state.selectShape);
   const [size, setSize] = useState({ width: 0, height: 0 });
 
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(
@@ -82,6 +93,31 @@ export default function Canvas() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  useEffect(() => {
+    if (selectedId && trRef.current) {
+      const stage = trRef.current.getStage();
+      const selectedNode = stage.findOne("#" + selectedId);
+      if (selectedNode) {
+        trRef.current.nodes([selectedNode]);
+        trRef.current.getLayer().batchDraw();
+      }
+    }
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (selectedId && trRef.current) {
+      const stage = trRef.current.getStage();
+      const selectedNode = stage.findOne("#" + selectedId);
+
+      if (selectedNode) {
+        trRef.current.nodes([selectedNode]);
+        trRef.current.getLayer().batchDraw();
+      }
+    } else if (trRef.current) {
+      trRef.current.nodes([]);
+    }
+  }, [selectedId]);
+
   const handleWheel = (e: any) => {
     e.evt.preventDefault();
     const scaleBy = 1.1;
@@ -111,9 +147,12 @@ export default function Canvas() {
   };
 
   const handleMouseDown = (e: any) => {
-    if (e.target !== e.target.getStage()) return;
-
     const stage = e.target.getStage();
+
+    if (e.target === stage) {
+      selectShape(null);
+    }
+
     const pos = getPointerPosition(stage);
 
     if (["rect", "circle", "line", "arrow"].includes(currentTool)) {
@@ -203,14 +242,30 @@ export default function Canvas() {
     const shapeKey = isTemp ? "temp-shape" : shape.id;
 
     const commonProps = {
+      id: shape.id,
       draggable: !isTemp && currentTool === "select",
-      onDragEnd: (e: any) => {
-        if (!isTemp) {
-          updateShape(shape.id, {
-            x: e.target.x(),
-            y: e.target.y(),
-          });
+      onClick: (e: any) => {
+        if (currentTool === "select") {
+          e.cancelBubble = true;
+          selectShape(shape.id);
         }
+      },
+      onDragEnd: (e: any) => {
+        updateShape(shape.id, {
+          x: e.target.x(),
+          y: e.target.y(),
+        });
+      },
+      onTransformEnd: (e: any) => {
+        const node = e.target;
+        updateShape(shape.id, {
+          x: node.x(),
+          y: node.y(),
+          width: node.width() * node.scaleX(),
+          height: node.height() * node.scaleY(),
+        });
+        node.scaleX(1);
+        node.scaleY(1);
       },
       onMouseEnter: (e: any) => {
         const container = e.target.getStage()?.container();
@@ -347,6 +402,21 @@ export default function Canvas() {
           />
         )}
         {shapes.map((shape) => renderShape(shape))}
+        {selectedId && (
+          <Transformer
+            ref={trRef}
+            boundBoxFunc={(oldBox, newBox) => {
+              const minSize = 5 / camera.scale;
+              if (
+                Math.abs(newBox.width) < minSize ||
+                Math.abs(newBox.height) < minSize
+              ) {
+                return oldBox;
+              }
+              return newBox;
+            }}
+          />
+        )}
         {isDrawing && currentShape && renderShape(currentShape as Shape, true)}
       </Layer>
     </Stage>
