@@ -56,9 +56,10 @@ export const useStore = create<CanvasState>((set) => ({
       ),
     })),
 
-  deleteShape: (id) =>
+  deleteShape: (id: string) =>
     set((state) => ({
       shapes: state.shapes.filter((s) => s.id !== id),
+      selectedId: state.selectedId === id ? null : state.selectedId,
     })),
   selectedId: null,
 

@@ -18,11 +18,7 @@ export default function Canvas() {
   const [gridImage, setGridImage] = useState<HTMLImageElement | undefined>(
     undefined,
   );
-  const trRef = useRef<any>(null);
-  const selectedId = useStore((state) => state.selectedId);
-  const selectShape = useStore((state) => state.selectShape);
   const [size, setSize] = useState({ width: 0, height: 0 });
-
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -34,13 +30,15 @@ export default function Canvas() {
   const currentTool = useStore((state) => state.currentTool);
   const isDrawing = useStore((state) => state.isDrawing);
   const setIsDrawing = useStore((state) => state.setIsDrawing);
+  const selectedId = useStore((state) => state.selectedId);
+  const selectShape = useStore((state) => state.selectShape);
 
   const stageRef = useRef<any>(null);
+  const trRef = useRef<any>(null);
 
   useEffect(() => {
-    const checkSize = () => {
+    const checkSize = () =>
       setSize({ width: window.innerWidth, height: window.innerHeight });
-    };
     checkSize();
     window.addEventListener("resize", checkSize);
     return () => window.removeEventListener("resize", checkSize);
@@ -64,7 +62,6 @@ export default function Canvas() {
       ctx.fillStyle = "#a1a19a";
       ctx.fillRect(step - 1, step - 1, 2, 2);
     }
-
     const img = new Image();
     img.src = canvas.toDataURL();
     img.onload = () => setGridImage(img);
@@ -72,43 +69,45 @@ export default function Canvas() {
 
   const dynamicGridScale = useMemo(() => {
     const log = Math.log2(1 / camera.scale);
-    const pow = Math.pow(2, Math.floor(log));
-    return pow;
+    return Math.pow(2, Math.floor(log));
   }, [camera.scale]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const { setTool, selectedId, deleteShape } = useStore.getState();
       const key = e.key.toLowerCase();
-      const setTool = useStore.getState().setTool;
+      const toolMap: Record<string, string> = {
+        v: "select",
+        r: "rect",
+        o: "circle",
+        l: "line",
+        a: "arrow",
+        h: "pan",
+      };
 
-      if (key === "v") setTool("select");
-      if (key === "r") setTool("rect");
-      if (key === "o") setTool("circle");
-      if (key === "l") setTool("line");
-      if (key === "a") setTool("arrow");
-      if (key === "h") setTool("pan");
+      if (toolMap[key]) {
+        setTool(toolMap[key] as any);
+        return;
+      }
+
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
+        if (
+          e.target === document.body ||
+          (e.target as HTMLElement).tagName === "CANVAS"
+        ) {
+          e.preventDefault();
+          deleteShape(selectedId);
+        }
+      }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   useEffect(() => {
-    if (selectedId && trRef.current) {
+    if (trRef.current && selectedId) {
       const stage = trRef.current.getStage();
       const selectedNode = stage.findOne("#" + selectedId);
-      if (selectedNode) {
-        trRef.current.nodes([selectedNode]);
-        trRef.current.getLayer().batchDraw();
-      }
-    }
-  }, [selectedId]);
-
-  useEffect(() => {
-    if (selectedId && trRef.current) {
-      const stage = trRef.current.getStage();
-      const selectedNode = stage.findOne("#" + selectedId);
-
       if (selectedNode) {
         trRef.current.nodes([selectedNode]);
         trRef.current.getLayer().batchDraw();
@@ -118,80 +117,68 @@ export default function Canvas() {
     }
   }, [selectedId]);
 
-  const handleWheel = (e: any) => {
-    e.evt.preventDefault();
-    const scaleBy = 1.1;
-    const stage = e.target.getStage();
-    const oldScale = stage.scaleX();
-
-    const mousePointTo = {
-      x: (stage.getPointerPosition().x - stage.x()) / oldScale,
-      y: (stage.getPointerPosition().y - stage.y()) / oldScale,
-    };
-
-    let newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
-    if (newScale < 0.01) newScale = 0.01;
-    if (newScale > 50) newScale = 50;
-
-    setCamera({
-      scale: newScale,
-      x: stage.getPointerPosition().x - mousePointTo.x * newScale,
-      y: stage.getPointerPosition().y - mousePointTo.y * newScale,
-    });
-  };
-
   const getPointerPosition = (stage: any) => {
     const transform = stage.getAbsoluteTransform().copy().invert();
-    const pos = transform.point(stage.getPointerPosition());
-    return pos;
+    return transform.point(stage.getPointerPosition());
   };
 
   const handleMouseDown = (e: any) => {
     const stage = e.target.getStage();
+    const clickedOnStage = e.target === stage;
 
-    if (e.target === stage) {
+    if (currentTool === "pan") {
       selectShape(null);
+      return;
     }
 
-    const pos = getPointerPosition(stage);
+    if (!clickedOnStage) {
+      const shapeNode = e.target;
+      const shapeId = shapeNode.id();
+      if (shapeId) {
+        selectShape(shapeId);
+        if (currentTool !== "select") {
+          useStore.getState().setTool("select");
+          setTimeout(() => shapeNode.startDrag(), 0);
+        }
+        return;
+      }
+    }
 
-    if (["rect", "circle", "line", "arrow"].includes(currentTool)) {
-      setIsDrawing(true);
-      setDrawStart(pos);
-      setCurrentShape({
-        type: currentTool as any,
-        x: pos.x,
-        y: pos.y,
-        width: 0,
-        height: 0,
-        fill:
-          currentTool === "rect" || currentTool === "circle"
-            ? "#6366f1"
-            : "transparent",
-        stroke:
-          currentTool === "line" || currentTool === "arrow"
-            ? "#6366f1"
-            : undefined,
-        strokeWidth:
-          currentTool === "line" || currentTool === "arrow" ? 3 : undefined,
-        points:
-          currentTool === "line" || currentTool === "arrow"
-            ? [0, 0, 0, 0]
-            : undefined,
-      });
+    if (clickedOnStage) {
+      selectShape(null);
+      if (["rect", "circle", "line", "arrow"].includes(currentTool)) {
+        const pos = getPointerPosition(stage);
+        setIsDrawing(true);
+        setDrawStart(pos);
+        setCurrentShape({
+          type: currentTool as any,
+          x: pos.x,
+          y: pos.y,
+          width: 0,
+          height: 0,
+          fill:
+            currentTool === "rect" || currentTool === "circle"
+              ? "#6366f1"
+              : "transparent",
+          stroke: "#6366f1",
+          strokeWidth: 3,
+          points:
+            currentTool === "line" || currentTool === "arrow"
+              ? [0, 0, 0, 0]
+              : undefined,
+        });
+      }
     }
   };
 
   const handleMouseMove = (e: any) => {
     if (!isDrawing || !drawStart || !currentShape) return;
-
     const stage = e.target.getStage();
     const pos = getPointerPosition(stage);
 
     if (currentTool === "rect" || currentTool === "circle") {
       const width = pos.x - drawStart.x;
       const height = pos.y - drawStart.y;
-
       setCurrentShape({
         ...currentShape,
         width: Math.abs(width),
@@ -200,62 +187,58 @@ export default function Canvas() {
         y: height < 0 ? pos.y : drawStart.y,
       });
     } else if (currentTool === "line" || currentTool === "arrow") {
-      const dx = pos.x - drawStart.x;
-      const dy = pos.y - drawStart.y;
-
       setCurrentShape({
         ...currentShape,
-        points: [0, 0, dx, dy],
+        points: [0, 0, pos.x - drawStart.x, pos.y - drawStart.y],
       });
     }
   };
 
-  const handleMouseUp = (e: any) => {
+  const handleMouseUp = () => {
     if (!isDrawing || !currentShape) return;
-
     const minThreshold = 5 / camera.scale;
+    const validRect =
+      (currentShape.width ?? 0) > minThreshold &&
+      (currentShape.height ?? 0) > minThreshold;
+    const pts = currentShape.points || [0, 0, 0, 0];
+    const validLine = Math.sqrt(pts[2] ** 2 + pts[3] ** 2) > minThreshold;
 
-    if (currentTool === "rect" || currentTool === "circle") {
-      if (
-        currentShape.width &&
-        currentShape.height &&
-        currentShape.width > minThreshold &&
-        currentShape.height > minThreshold
-      ) {
-        addShape(currentShape as Omit<Shape, "id">);
-      }
-    } else if (currentTool === "line" || currentTool === "arrow") {
-      const points = currentShape.points || [0, 0, 0, 0];
-      const distance = Math.sqrt(points[2] ** 2 + points[3] ** 2);
-
-      if (distance > minThreshold) {
-        addShape(currentShape as Omit<Shape, "id">);
-      }
+    if (
+      (["rect", "circle"].includes(currentTool as string) && validRect) ||
+      (["line", "arrow"].includes(currentTool as string) && validLine)
+    ) {
+      addShape(currentShape as Omit<Shape, "id">);
     }
-
     setIsDrawing(false);
     setDrawStart(null);
     setCurrentShape(null);
   };
 
+  const handleWheel = (e: any) => {
+    e.evt.preventDefault();
+    const stage = e.target.getStage();
+    const oldScale = stage.scaleX();
+    const mousePointTo = {
+      x: (stage.getPointerPosition().x - stage.x()) / oldScale,
+      y: (stage.getPointerPosition().y - stage.y()) / oldScale,
+    };
+    let newScale = e.evt.deltaY < 0 ? oldScale * 1.1 : oldScale / 1.1;
+    newScale = Math.min(Math.max(newScale, 0.01), 50);
+    setCamera({
+      scale: newScale,
+      x: stage.getPointerPosition().x - mousePointTo.x * newScale,
+      y: stage.getPointerPosition().y - mousePointTo.y * newScale,
+    });
+  };
+
   const renderShape = (shape: Shape, isTemp = false) => {
     const shapeKey = isTemp ? "temp-shape" : shape.id;
-
     const commonProps = {
       id: shape.id,
       draggable: !isTemp && currentTool === "select",
-      onClick: (e: any) => {
-        if (currentTool === "select") {
-          e.cancelBubble = true;
-          selectShape(shape.id);
-        }
-      },
-      onDragEnd: (e: any) => {
-        updateShape(shape.id, {
-          x: e.target.x(),
-          y: e.target.y(),
-        });
-      },
+      onDragStart: () => selectShape(shape.id),
+      onDragEnd: (e: any) =>
+        updateShape(shape.id, { x: e.target.x(), y: e.target.y() }),
       onTransformEnd: (e: any) => {
         const node = e.target;
         updateShape(shape.id, {
@@ -269,9 +252,8 @@ export default function Canvas() {
       },
       onMouseEnter: (e: any) => {
         const container = e.target.getStage()?.container();
-        if (container && currentTool === "select") {
+        if (container && currentTool === "select")
           container.style.cursor = "grab";
-        }
       },
       onMouseLeave: (e: any) => {
         const container = e.target.getStage()?.container();
@@ -279,7 +261,7 @@ export default function Canvas() {
       },
     };
 
-    if (shape.type === "rect") {
+    if (shape.type === "rect")
       return (
         <Rect
           key={shapeKey}
@@ -293,9 +275,7 @@ export default function Canvas() {
           opacity={isTemp ? 0.5 : 1}
         />
       );
-    }
-
-    if (shape.type === "circle") {
+    if (shape.type === "circle")
       return (
         <Circle
           key={shapeKey}
@@ -311,49 +291,28 @@ export default function Canvas() {
           offsetY={-(shape.height / 2)}
         />
       );
-    }
-
-    if (shape.type === "line") {
+    if (shape.type === "line" || shape.type === "arrow") {
+      const Comp = shape.type === "line" ? Line : Arrow;
       return (
-        <Line
+        <Comp
           key={shapeKey}
           {...commonProps}
           x={shape.x}
           y={shape.y}
           points={shape.points || [0, 0, 0, 0]}
-          stroke={shape.stroke}
-          strokeWidth={
-            shape.strokeWidth
-              ? shape.strokeWidth / camera.scale
-              : 3 / camera.scale
-          }
-          lineCap="round"
-          lineJoin="round"
-          opacity={isTemp ? 0.5 : 1}
-        />
-      );
-    }
-
-    if (shape.type === "arrow") {
-      return (
-        <Arrow
-          key={shapeKey}
-          {...commonProps}
-          x={shape.x}
-          y={shape.y}
-          points={shape.points || [0, 0, 0, 0]}
-          stroke={shape.stroke}
+          stroke={shape.stroke || "#6366f1"}
           strokeWidth={3 / camera.scale}
-          fill={shape.stroke}
+          fill={shape.stroke || "#6366f1"}
           lineCap="round"
           lineJoin="round"
-          pointerLength={10 / camera.scale}
-          pointerWidth={10 / camera.scale}
           opacity={isTemp ? 0.5 : 1}
+          {...(shape.type === "arrow" && {
+            pointerLength: 10 / camera.scale,
+            pointerWidth: 10 / camera.scale,
+          })}
         />
       );
     }
-
     return null;
   };
 
@@ -373,15 +332,11 @@ export default function Canvas() {
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      onDragEnd={(e) => {
-        if (e.target === e.target.getStage()) {
-          setCamera({
-            ...camera,
-            x: e.target.x(),
-            y: e.target.y(),
-          });
-        }
-      }}
+      style={{ cursor: currentTool === "pan" ? "grab" : "default" }}
+      onDragEnd={(e) =>
+        e.target === e.target.getStage() &&
+        setCamera({ ...camera, x: e.target.x(), y: e.target.y() })
+      }
     >
       <Layer>
         {gridImage && (
@@ -391,30 +346,19 @@ export default function Canvas() {
             width={size.width / camera.scale}
             height={size.height / camera.scale}
             fillPatternImage={gridImage}
-            fillPatternScale={{
-              x: dynamicGridScale,
-              y: dynamicGridScale,
-            }}
-            fillPatternOffset={{ x: 0, y: 0 }}
+            fillPatternScale={{ x: dynamicGridScale, y: dynamicGridScale }}
             fillPatternRepeat="repeat"
             opacity={0.9}
             listening={false}
           />
         )}
-        {shapes.map((shape) => renderShape(shape))}
+        {shapes.map((s) => renderShape(s))}
         {selectedId && (
           <Transformer
             ref={trRef}
-            boundBoxFunc={(oldBox, newBox) => {
-              const minSize = 5 / camera.scale;
-              if (
-                Math.abs(newBox.width) < minSize ||
-                Math.abs(newBox.height) < minSize
-              ) {
-                return oldBox;
-              }
-              return newBox;
-            }}
+            boundBoxFunc={(oldB, newB) =>
+              Math.abs(newB.width) < 5 / camera.scale ? oldB : newB
+            }
           />
         )}
         {isDrawing && currentShape && renderShape(currentShape as Shape, true)}
