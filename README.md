@@ -34,7 +34,6 @@ Inkspace is a web-based infinite canvas tool built from the ground up to handle 
 ### Real-Time
 
 - **Partykit** - WebSocket infrastructure for real-time collaboration
-- **Yjs** - CRDT for conflict-free multiplayer sync
 
 ### Auth
 

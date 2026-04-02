@@ -1,40 +1,74 @@
 "use client";
 
-import {
-  Stage,
-  Layer,
-  Rect,
-  Circle,
-  Line,
-  Arrow,
-  Transformer,
-} from "react-konva";
-import { useState, useEffect, useMemo, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react";
+import { Stage, Layer, Rect, Transformer } from "react-konva";
 import { useStore } from "@/store/useStore";
-import type { Shape } from "@/store/useStore";
+import type { Shape, ShapeType } from "@/store/useStore";
+import type { KonvaEventObject } from "konva/lib/Node";
+import type { Stage as KonvaStage } from "konva/lib/Stage";
+import { MemoizedShape } from "@/components/MemoizedShape/MemoizedShape";
 
 export default function Canvas() {
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const [gridImage, setGridImage] = useState<HTMLImageElement | undefined>(
     undefined,
   );
-  const [size, setSize] = useState({ width: 0, height: 0 });
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(
     null,
   );
-  const [currentShape, setCurrentShape] = useState<Partial<Shape> | null>(null);
+  const [localCurrentShape, setLocalCurrentShape] =
+    useState<Partial<Shape> | null>(null);
+  const [selectionRect, setSelectionRect] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
-  const shapes = useStore((state) => state.shapes);
-  const addShape = useStore((state) => state.addShape);
-  const updateShape = useStore((state) => state.updateShape);
-  const currentTool = useStore((state) => state.currentTool);
-  const isDrawing = useStore((state) => state.isDrawing);
-  const setIsDrawing = useStore((state) => state.setIsDrawing);
-  const selectedId = useStore((state) => state.selectedId);
-  const selectShape = useStore((state) => state.selectShape);
+  const [isZooming, setIsZooming] = useState(false);
+  const zoomTimer = useRef<NodeJS.Timeout | null>(null);
 
-  const stageRef = useRef<any>(null);
+  const {
+    shapes,
+    addShape,
+    updateShape,
+    currentTool,
+    selectedIds,
+    selectShapes,
+    deleteShapes,
+    brushSize,
+  } = useStore();
+
+  const stageRef = useRef<KonvaStage | null>(null);
   const trRef = useRef<any>(null);
+
+  const dynamicGridScale = useMemo(
+    () => Math.pow(2, Math.floor(Math.log2(1 / camera.scale))),
+    [camera.scale],
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        (e.key === "Delete" || e.key === "Backspace") &&
+        selectedIds.length > 0
+      ) {
+        if (e.target === document.body) {
+          e.preventDefault();
+          deleteShapes(selectedIds);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedIds, deleteShapes]);
 
   useEffect(() => {
     const checkSize = () =>
@@ -67,302 +101,323 @@ export default function Canvas() {
     img.onload = () => setGridImage(img);
   }, []);
 
-  const dynamicGridScale = useMemo(() => {
-    const log = Math.log2(1 / camera.scale);
-    return Math.pow(2, Math.floor(log));
+  useEffect(() => {
+    if (!trRef.current) return;
+    const stage = trRef.current.getStage();
+    if (!stage) return;
+
+    const nodes = selectedIds
+      .map((id) => stage.findOne("#" + id))
+      .filter((n): n is any => !!n);
+
+    trRef.current.nodes(nodes);
+    trRef.current.getLayer()?.batchDraw();
+  }, [selectedIds]);
+
+  useEffect(() => {
+    if (trRef.current && selectedIds.length > 0) {
+      trRef.current.forceUpdate();
+      trRef.current.getLayer()?.batchDraw();
+    }
   }, [camera.scale]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const { setTool, selectedId, deleteShape } = useStore.getState();
-      const key = e.key.toLowerCase();
-      const toolMap: Record<string, string> = {
-        v: "select",
-        r: "rect",
-        o: "circle",
-        l: "line",
-        a: "arrow",
-        h: "pan",
-      };
-
-      if (toolMap[key]) {
-        setTool(toolMap[key] as any);
-        return;
-      }
-
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
-        if (
-          e.target === document.body ||
-          (e.target as HTMLElement).tagName === "CANVAS"
-        ) {
-          e.preventDefault();
-          deleteShape(selectedId);
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  useEffect(() => {
-    if (trRef.current && selectedId) {
-      const stage = trRef.current.getStage();
-      const selectedNode = stage.findOne("#" + selectedId);
-      if (selectedNode) {
-        trRef.current.nodes([selectedNode]);
-        trRef.current.getLayer().batchDraw();
-      }
-    } else if (trRef.current) {
-      trRef.current.nodes([]);
-    }
-  }, [selectedId]);
-
-  const getPointerPosition = (stage: any) => {
-    const transform = stage.getAbsoluteTransform().copy().invert();
-    return transform.point(stage.getPointerPosition());
+  const getPointerPosition = (stage: KonvaStage) => {
+    const pos = stage.getPointerPosition();
+    if (!pos) return { x: 0, y: 0 };
+    return stage.getAbsoluteTransform().copy().invert().point(pos);
   };
 
-  const handleMouseDown = (e: any) => {
+  const handleWheel = (e: KonvaEventObject<WheelEvent>) => {
+    e.evt.preventDefault();
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    setIsZooming(true);
+    if (zoomTimer.current) clearTimeout(zoomTimer.current);
+    zoomTimer.current = setTimeout(() => setIsZooming(false), 100);
+
+    const oldScale = stage.scaleX();
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+
+    const mousePointTo = {
+      x: (pointer.x - stage.x()) / oldScale,
+      y: (pointer.y - stage.y()) / oldScale,
+    };
+
+    let newScale = e.evt.deltaY < 0 ? oldScale * 1.1 : oldScale / 1.1;
+    newScale = Math.min(Math.max(newScale, 0.001), 50);
+
+    setCamera({
+      scale: newScale,
+      x: pointer.x - mousePointTo.x * newScale,
+      y: pointer.y - mousePointTo.y * newScale,
+    });
+  };
+
+  const handleDragMove = useCallback(
+    (e: KonvaEventObject<DragEvent>) => {
+      if (selectedIds.includes(e.target.id()) && trRef.current) {
+        trRef.current.getLayer()?.batchDraw();
+      }
+    },
+    [selectedIds],
+  );
+
+  const handleDragEnd = useCallback(
+    (id: string, type: string, width: number, height: number) =>
+      (e: KonvaEventObject<DragEvent>) => {
+        const stage = e.target.getStage();
+        if (!stage) return;
+
+        if (selectedIds.includes(id)) {
+          selectedIds.forEach((sid) => {
+            const node = stage.findOne("#" + sid);
+            if (!node) return;
+            const shape = useStore.getState().shapes.find((s) => s.id === sid);
+            if (shape?.type === "circle") {
+              updateShape(sid, {
+                x: node.x() - shape.width / 2,
+                y: node.y() - shape.height / 2,
+              });
+            } else {
+              updateShape(sid, { x: node.x(), y: node.y() });
+            }
+          });
+        } else {
+          updateShape(
+            id,
+            type === "circle"
+              ? {
+                  x: e.target.x() - width / 2,
+                  y: e.target.y() - height / 2,
+                }
+              : { x: e.target.x(), y: e.target.y() },
+          );
+        }
+      },
+    [selectedIds, updateShape],
+  );
+
+  const handleTransformEnd = useCallback(
+    (id: string, type: string, oldPoints?: number[]) =>
+      (e: KonvaEventObject<Event>) => {
+        const n = e.target;
+        const sx = n.scaleX();
+        const sy = n.scaleY();
+        n.scaleX(1);
+        n.scaleY(1);
+
+        if (type === "rect") {
+          updateShape(id, {
+            x: n.x(),
+            y: n.y(),
+            rotation: n.rotation(),
+            width: Math.max(5, n.width() * sx),
+            height: Math.max(5, n.height() * sy),
+          });
+        } else if (type === "circle") {
+          const newWidth = Math.max(5, n.width() * sx);
+          const newHeight = Math.max(5, n.height() * sy);
+          updateShape(id, {
+            x: n.x() - newWidth / 2,
+            y: n.y() - newHeight / 2,
+            rotation: n.rotation(),
+            width: newWidth,
+            height: newHeight,
+          });
+        } else {
+          updateShape(id, {
+            x: n.x(),
+            y: n.y(),
+            rotation: n.rotation(),
+            points: (oldPoints ?? [0, 0, 0, 0]).map((p, i) =>
+              i % 2 === 0 ? p * sx : p * sy,
+            ),
+          });
+        }
+      },
+    [updateShape],
+  );
+
+  const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     const stage = e.target.getStage();
+    if (!stage) return;
+    const pos = getPointerPosition(stage);
     const clickedOnStage = e.target === stage;
 
-    if (currentTool === "pan") {
-      selectShape(null);
+    if (currentTool === "select") {
+      const id = e.target.id();
+      if (id && selectedIds.includes(id)) return;
+      if (clickedOnStage) {
+        selectShapes([]);
+        setDrawStart(pos);
+        setSelectionRect({ ...pos, width: 0, height: 0 });
+      } else if (id) {
+        selectShapes([id]);
+      }
       return;
     }
 
-    if (!clickedOnStage) {
-      const shapeNode = e.target;
-      const shapeId = shapeNode.id();
-      if (shapeId) {
-        selectShape(shapeId);
-        if (currentTool !== "select") {
-          useStore.getState().setTool("select");
-          setTimeout(() => shapeNode.startDrag(), 0);
-        }
-        return;
-      }
-    }
+    if (currentTool === "pan") return;
 
-    if (clickedOnStage) {
-      selectShape(null);
-      if (["rect", "circle", "line", "arrow"].includes(currentTool)) {
-        const pos = getPointerPosition(stage);
-        setIsDrawing(true);
-        setDrawStart(pos);
-        setCurrentShape({
-          type: currentTool as any,
-          x: pos.x,
-          y: pos.y,
-          width: 0,
-          height: 0,
-          fill:
-            currentTool === "rect" || currentTool === "circle"
-              ? "#6366f1"
-              : "transparent",
-          stroke: "#6366f1",
-          strokeWidth: 3,
-          points:
-            currentTool === "line" || currentTool === "arrow"
-              ? [0, 0, 0, 0]
-              : undefined,
-        });
-      }
+    if (
+      clickedOnStage &&
+      ["rect", "circle", "line", "arrow"].includes(currentTool)
+    ) {
+      setDrawStart(pos);
+      const { activeFill, activeStroke } = useStore.getState();
+      setLocalCurrentShape({
+        type: currentTool as ShapeType,
+        x: pos.x,
+        y: pos.y,
+        width: 0,
+        height: 0,
+        fill:
+          currentTool === "rect" || currentTool === "circle"
+            ? activeFill
+            : "transparent",
+        stroke: activeStroke,
+        strokeWidth: brushSize,
+        points: [0, 0, 0, 0],
+        rotation: 0,
+      });
     }
   };
 
-  const handleMouseMove = (e: any) => {
-    if (!isDrawing || !drawStart || !currentShape) return;
+  const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
     const stage = e.target.getStage();
+    if (!stage || !drawStart) return;
     const pos = getPointerPosition(stage);
 
-    if (currentTool === "rect" || currentTool === "circle") {
-      const width = pos.x - drawStart.x;
-      const height = pos.y - drawStart.y;
-      setCurrentShape({
-        ...currentShape,
-        width: Math.abs(width),
-        height: Math.abs(height),
-        x: width < 0 ? pos.x : drawStart.x,
-        y: height < 0 ? pos.y : drawStart.y,
+    if (currentTool === "select" && selectionRect) {
+      setSelectionRect({
+        x: Math.min(pos.x, drawStart.x),
+        y: Math.min(pos.y, drawStart.y),
+        width: Math.abs(pos.x - drawStart.x),
+        height: Math.abs(pos.y - drawStart.y),
       });
-    } else if (currentTool === "line" || currentTool === "arrow") {
-      setCurrentShape({
-        ...currentShape,
-        points: [0, 0, pos.x - drawStart.x, pos.y - drawStart.y],
-      });
+    } else if (localCurrentShape) {
+      const w = pos.x - drawStart.x;
+      const h = pos.y - drawStart.y;
+      if (currentTool === "rect" || currentTool === "circle") {
+        setLocalCurrentShape({
+          ...localCurrentShape,
+          width: Math.abs(w),
+          height: Math.abs(h),
+          x: w < 0 ? pos.x : drawStart.x,
+          y: h < 0 ? pos.y : drawStart.y,
+        });
+      } else {
+        setLocalCurrentShape({ ...localCurrentShape, points: [0, 0, w, h] });
+      }
     }
   };
 
   const handleMouseUp = () => {
-    if (!isDrawing || !currentShape) return;
-    const minThreshold = 5 / camera.scale;
-    const validRect =
-      (currentShape.width ?? 0) > minThreshold &&
-      (currentShape.height ?? 0) > minThreshold;
-    const pts = currentShape.points || [0, 0, 0, 0];
-    const validLine = Math.sqrt(pts[2] ** 2 + pts[3] ** 2) > minThreshold;
-
-    if (
-      (["rect", "circle"].includes(currentTool as string) && validRect) ||
-      (["line", "arrow"].includes(currentTool as string) && validLine)
-    ) {
-      addShape(currentShape as Omit<Shape, "id">);
+    if (selectionRect) {
+      const overlapping = shapes
+        .filter(
+          (s) =>
+            s.x >= selectionRect.x &&
+            s.x + s.width <= selectionRect.x + selectionRect.width &&
+            s.y >= selectionRect.y &&
+            s.y + s.height <= selectionRect.y + selectionRect.height,
+        )
+        .map((s) => s.id);
+      selectShapes(overlapping);
+      setSelectionRect(null);
+    } else if (localCurrentShape) {
+      addShape(localCurrentShape as Omit<Shape, "id">);
+      setLocalCurrentShape(null);
     }
-    setIsDrawing(false);
     setDrawStart(null);
-    setCurrentShape(null);
-  };
-
-  const handleWheel = (e: any) => {
-    e.evt.preventDefault();
-    const stage = e.target.getStage();
-    const oldScale = stage.scaleX();
-    const mousePointTo = {
-      x: (stage.getPointerPosition().x - stage.x()) / oldScale,
-      y: (stage.getPointerPosition().y - stage.y()) / oldScale,
-    };
-    let newScale = e.evt.deltaY < 0 ? oldScale * 1.1 : oldScale / 1.1;
-    newScale = Math.min(Math.max(newScale, 0.01), 50);
-    setCamera({
-      scale: newScale,
-      x: stage.getPointerPosition().x - mousePointTo.x * newScale,
-      y: stage.getPointerPosition().y - mousePointTo.y * newScale,
-    });
-  };
-
-  const renderShape = (shape: Shape, isTemp = false) => {
-    const shapeKey = isTemp ? "temp-shape" : shape.id;
-    const commonProps = {
-      id: shape.id,
-      draggable: !isTemp && currentTool === "select",
-      onDragStart: () => selectShape(shape.id),
-      onDragEnd: (e: any) =>
-        updateShape(shape.id, { x: e.target.x(), y: e.target.y() }),
-      onTransformEnd: (e: any) => {
-        const node = e.target;
-        updateShape(shape.id, {
-          x: node.x(),
-          y: node.y(),
-          width: node.width() * node.scaleX(),
-          height: node.height() * node.scaleY(),
-        });
-        node.scaleX(1);
-        node.scaleY(1);
-      },
-      onMouseEnter: (e: any) => {
-        const container = e.target.getStage()?.container();
-        if (container && currentTool === "select")
-          container.style.cursor = "grab";
-      },
-      onMouseLeave: (e: any) => {
-        const container = e.target.getStage()?.container();
-        if (container) container.style.cursor = "default";
-      },
-    };
-
-    if (shape.type === "rect")
-      return (
-        <Rect
-          key={shapeKey}
-          {...commonProps}
-          x={shape.x}
-          y={shape.y}
-          width={shape.width}
-          height={shape.height}
-          fill={shape.fill}
-          cornerRadius={4 / camera.scale}
-          opacity={isTemp ? 0.5 : 1}
-        />
-      );
-    if (shape.type === "circle")
-      return (
-        <Circle
-          key={shapeKey}
-          {...commonProps}
-          x={shape.x}
-          y={shape.y}
-          radius={Math.abs(shape.width / 2)}
-          fill={shape.fill}
-          stroke={shape.stroke}
-          strokeWidth={shape.strokeWidth}
-          opacity={isTemp ? 0.5 : 1}
-          offsetX={-(shape.width / 2)}
-          offsetY={-(shape.height / 2)}
-        />
-      );
-    if (shape.type === "line" || shape.type === "arrow") {
-      const Comp = shape.type === "line" ? Line : Arrow;
-      return (
-        <Comp
-          key={shapeKey}
-          {...commonProps}
-          x={shape.x}
-          y={shape.y}
-          points={shape.points || [0, 0, 0, 0]}
-          stroke={shape.stroke || "#6366f1"}
-          strokeWidth={3 / camera.scale}
-          fill={shape.stroke || "#6366f1"}
-          lineCap="round"
-          lineJoin="round"
-          opacity={isTemp ? 0.5 : 1}
-          {...(shape.type === "arrow" && {
-            pointerLength: 10 / camera.scale,
-            pointerWidth: 10 / camera.scale,
-          })}
-        />
-      );
-    }
-    return null;
   };
 
   return (
-    <Stage
-      ref={stageRef}
-      width={size.width}
-      height={size.height}
-      draggable={
-        currentTool === "pan" || (currentTool === "select" && !isDrawing)
-      }
-      x={camera.x}
-      y={camera.y}
-      scaleX={camera.scale}
-      scaleY={camera.scale}
-      onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      style={{ cursor: currentTool === "pan" ? "grab" : "default" }}
-      onDragEnd={(e) =>
-        e.target === e.target.getStage() &&
-        setCamera({ ...camera, x: e.target.x(), y: e.target.y() })
-      }
-    >
-      <Layer>
-        {gridImage && (
-          <Rect
-            x={-camera.x / camera.scale}
-            y={-camera.y / camera.scale}
-            width={size.width / camera.scale}
-            height={size.height / camera.scale}
-            fillPatternImage={gridImage}
-            fillPatternScale={{ x: dynamicGridScale, y: dynamicGridScale }}
-            fillPatternRepeat="repeat"
-            opacity={0.9}
-            listening={false}
-          />
-        )}
-        {shapes.map((s) => renderShape(s))}
-        {selectedId && (
-          <Transformer
-            ref={trRef}
-            boundBoxFunc={(oldB, newB) =>
-              Math.abs(newB.width) < 5 / camera.scale ? oldB : newB
-            }
-          />
-        )}
-        {isDrawing && currentShape && renderShape(currentShape as Shape, true)}
-      </Layer>
-    </Stage>
+    <div className="h-screen w-screen overflow-hidden bg-[#f8f8f7]">
+      <Stage
+        ref={stageRef}
+        width={size.width}
+        height={size.height}
+        x={camera.x}
+        y={camera.y}
+        scaleX={camera.scale}
+        scaleY={camera.scale}
+        draggable={currentTool === "pan"}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onWheel={handleWheel}
+        onDragMove={(e) =>
+          e.target === e.target.getStage() &&
+          setCamera((prev) => ({ ...prev, x: e.target.x(), y: e.target.y() }))
+        }
+        style={{ cursor: currentTool === "pan" ? "grab" : "default" }}
+      >
+        <Layer>
+          {gridImage && (
+            <Rect
+              x={-camera.x / camera.scale}
+              y={-camera.y / camera.scale}
+              width={size.width / camera.scale}
+              height={size.height / camera.scale}
+              fillPatternImage={gridImage}
+              fillPatternScale={{ x: dynamicGridScale, y: dynamicGridScale }}
+              fillPatternRepeat="repeat"
+              opacity={0.8}
+              listening={false}
+            />
+          )}
+          {shapes.map((s) => (
+            <MemoizedShape
+              key={s.id}
+              shape={s}
+              isSelected={selectedIds.includes(s.id)}
+              isSelectMode={currentTool === "select"}
+              cameraScale={camera.scale}
+              onDragMove={handleDragMove}
+              onDragEnd={handleDragEnd(s.id, s.type, s.width, s.height)}
+              onTransformEnd={handleTransformEnd(s.id, s.type, s.points)}
+            />
+          ))}
+          {selectionRect && (
+            <Rect
+              {...selectionRect}
+              fill="rgba(99, 102, 241, 0.1)"
+              stroke="#6366f1"
+              strokeWidth={Math.min(1 / camera.scale, 2)}
+              dash={[4 / camera.scale, 2 / camera.scale]}
+              listening={false}
+            />
+          )}
+          {localCurrentShape && (
+            <MemoizedShape
+              shape={{ ...localCurrentShape, id: "preview" } as Shape}
+              isSelected={false}
+              isSelectMode={false}
+              cameraScale={camera.scale}
+              onDragMove={() => {}}
+              onDragEnd={() => {}}
+              onTransformEnd={() => {}}
+            />
+          )}
+          {selectedIds.length > 0 && (
+            <Transformer
+              ref={trRef}
+              opacity={isZooming ? 0 : 1}
+              rotateEnabled
+              ignoreStroke={true}
+              anchorSize={Math.min(8 / camera.scale, 20)}
+              borderStrokeWidth={Math.min(1 / camera.scale, 2)}
+              anchorStrokeWidth={Math.min(1 / camera.scale, 2)}
+              boundBoxFunc={(oldB, newB) =>
+                Math.abs(newB.width) < 5 / camera.scale ? oldB : newB
+              }
+            />
+          )}
+        </Layer>
+      </Stage>
+    </div>
   );
 }
