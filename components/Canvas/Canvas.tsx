@@ -10,8 +10,9 @@ import React, {
 import { Stage, Layer, Rect, Transformer } from "react-konva";
 import { useStore } from "@/store/useStore";
 import type { Shape, ShapeType } from "@/store/useStore";
-import type { KonvaEventObject } from "konva/lib/Node";
+import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
 import type { Stage as KonvaStage } from "konva/lib/Stage";
+import type { Transformer as KonvaTransformer } from "konva/lib/shapes/Transformer";
 import { MemoizedShape } from "@/components/MemoizedShape/MemoizedShape";
 
 export default function Canvas() {
@@ -44,10 +45,12 @@ export default function Canvas() {
     selectShapes,
     deleteShapes,
     brushSize,
+    undo,
+    redo,
   } = useStore();
 
   const stageRef = useRef<KonvaStage | null>(null);
-  const trRef = useRef<any>(null);
+  const trRef = useRef<KonvaTransformer | null>(null);
 
   const dynamicGridScale = useMemo(
     () => Math.pow(2, Math.floor(Math.log2(1 / camera.scale))),
@@ -65,10 +68,28 @@ export default function Canvas() {
           deleteShapes(selectedIds);
         }
       }
+
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "z"
+      ) {
+        e.preventDefault();
+        undo();
+      }
+
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.key.toLowerCase() === "y" ||
+          (e.shiftKey && e.key.toLowerCase() === "z"))
+      ) {
+        e.preventDefault();
+        redo();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedIds, deleteShapes]);
+  }, [selectedIds, deleteShapes, undo, redo]);
 
   useEffect(() => {
     const checkSize = () =>
@@ -102,16 +123,15 @@ export default function Canvas() {
   }, []);
 
   useEffect(() => {
-    if (!trRef.current) return;
-    const stage = trRef.current.getStage();
-    if (!stage) return;
+    const stage = stageRef.current;
+    if (!stage || !trRef.current) return;
 
     const nodes = selectedIds
       .map((id) => stage.findOne("#" + id))
-      .filter((n): n is any => !!n);
+      .filter((n): n is KonvaNode => !!n);
 
-    trRef.current.nodes(nodes);
-    trRef.current.getLayer()?.batchDraw();
+    trRef.current?.nodes(nodes);
+    trRef.current?.getLayer()?.batchDraw();
   }, [selectedIds]);
 
   useEffect(() => {
@@ -119,7 +139,7 @@ export default function Canvas() {
       trRef.current.forceUpdate();
       trRef.current.getLayer()?.batchDraw();
     }
-  }, [camera.scale]);
+  }, [camera.scale, selectedIds.length]);
 
   const getPointerPosition = (stage: KonvaStage) => {
     const pos = stage.getPointerPosition();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Palette, X, Sparkles, Pencil } from "lucide-react";
 import { useStore } from "@/store/useStore";
 
@@ -109,26 +109,15 @@ export default function ColorPicker({ onClose }: ColorPickerProps) {
 
   const currentColor = activeTarget === "fill" ? activeFill : activeStroke;
 
-  const [hsv, setHsv] = useState(() =>
-    hexToHsv(currentColor.startsWith("#") ? currentColor : "#6366f1"),
+  const hsv = useMemo(
+    () => hexToHsv(currentColor.startsWith("#") ? currentColor : "#6366f1"),
+    [currentColor],
   );
   const [hexInput, setHexInput] = useState(currentColor);
   const [hexError, setHexError] = useState<string | null>(null);
 
   const gradientRef = useRef<HTMLCanvasElement>(null);
   const isDraggingGradient = useRef(false);
-  const isFirstRender = useRef(true);
-
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    if (currentColor.startsWith("#")) {
-      setHexInput(currentColor);
-      setHsv(hexToHsv(currentColor));
-    }
-  }, [currentColor]);
 
   const drawGradient = useCallback(() => {
     const canvas = gradientRef.current;
@@ -155,7 +144,6 @@ export default function ColorPicker({ onClose }: ColorPickerProps) {
 
   const applyHsv = useCallback(
     (newHsv: { h: number; s: number; v: number }) => {
-      setHsv(newHsv);
       const [r, g, b] = hsvToRgb(newHsv.h, newHsv.s, newHsv.v);
       const hex = rgbToHex(r, g, b);
       setHexInput(hex);
@@ -209,7 +197,6 @@ export default function ColorPicker({ onClose }: ColorPickerProps) {
       setHexError(null);
       const hex = `#${normalized.toLowerCase()}`;
       setTargetColor(hex);
-      setHsv(hexToHsv(hex));
 
       if (activeTarget === "fill") {
         useStore.getState().setTargetColor(hex, "stroke");
@@ -292,7 +279,6 @@ export default function ColorPicker({ onClose }: ColorPickerProps) {
             key={color}
             onClick={() => {
               setTargetColor(color);
-              setHsv(hexToHsv(color));
               setHexInput(color);
               if (activeTarget === "fill") {
                 useStore.getState().setTargetColor(color, "stroke");

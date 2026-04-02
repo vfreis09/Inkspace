@@ -19,7 +19,11 @@ export default function Toolbar() {
   const isColorPickerOpen = useStore((state) => state.isColorPickerOpen);
   const toggleColorPicker = useStore((state) => state.toggleColorPicker);
 
-  const tools: { id: Tool; icon: any; label: string }[] = [
+  const tools: {
+    id: Tool;
+    icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+    label: string;
+  }[] = [
     { id: "select", icon: MousePointer2, label: "Select (V)" },
     { id: "pan", icon: Hand, label: "Pan (H)" },
     { id: "rect", icon: Square, label: "Rectangle (R)" },
