@@ -1,18 +1,21 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Toolbar from "@/components/Toolbar/Toolbar";
-import ColorPicker from "@/components/ColorPicker/ColorPicker";
-import { useStore } from "@/store/useStore";
+import Toolbar from "@/features/boards/components/Toolbar/Toolbar";
+import ColorPicker from "@/features/boards/components/ColorPicker/ColorPicker";
+import { useStore } from "@/features/boards/store/useStore";
 
-const Canvas = dynamic(() => import("../components/Canvas/Canvas"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-screen w-full items-center justify-center bg-zinc-900 text-white">
-      Loading Engine...
-    </div>
-  ),
-});
+const Canvas = dynamic(
+  () => import("../features/boards/components/Canvas/Canvas"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-screen w-full items-center justify-center bg-zinc-900 text-white">
+        Loading Engine...
+      </div>
+    ),
+  },
+);
 
 export default function Home() {
   const isColorPickerOpen = useStore((state) => state.isColorPickerOpen);

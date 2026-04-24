@@ -1,0 +1,85 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ShapeType {
+  rect
+  circle
+  line
+  arrow
+}
+
+enum BoardRole {
+  owner
+  editor
+  viewer
+}
+
+model User {
+  id        String   @id // Will be Clerk user ID (e.g. "user_2abc...")
+  email     String   @unique
+  name      String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ownedBoards Board[]
+  memberships BoardMember[]
+}
+
+model Board {
+  id        String   @id @default(cuid())
+  name      String
+  thumbnail String?  // base64 or URL, generated on save
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  shapes  Shape[]
+  members BoardMember[]
+}
+
+model BoardMember {
+  id        String    @id @default(cuid())
+  role      BoardRole @default(viewer)
+  createdAt DateTime  @default(now())
+
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([boardId, userId])
+}
+
+model Shape {
+  id          String    @id @default(cuid())
+  type        ShapeType
+  x           Float
+  y           Float
+  width       Float
+  height      Float
+  rotation    Float     @default(0)
+  fill        String
+  stroke      String
+  strokeWidth Float
+  points      Float[]   // empty array for rect/circle, used for line/arrow
+  order       Int       @default(0) // z-index / layer order
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  // Who last touched this shape (for collab cursors later)
+  lastEditedBy String?
+}
