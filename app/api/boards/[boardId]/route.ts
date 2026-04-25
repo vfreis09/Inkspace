@@ -5,6 +5,7 @@ import {
   updateBoardForUser,
   deleteBoardForUser,
 } from "@/lib/controllers/board.controller";
+import { ensureUser } from "@/lib/auth/ensureUser";
 
 type Params = { params: Promise<{ boardId: string }> };
 
@@ -13,7 +14,7 @@ function errorToStatus(error: "not_found" | "forbidden") {
 }
 
 export async function GET(req: NextRequest, { params }: Params) {
-  const userId = await getCurrentUserId(req);
+  const userId = await getCurrentUserId();
   if (!userId) return unauthorizedResponse();
 
   const { boardId } = await params;
@@ -30,8 +31,9 @@ export async function GET(req: NextRequest, { params }: Params) {
 }
 
 export async function PUT(req: NextRequest, { params }: Params) {
-  const userId = await getCurrentUserId(req);
+  const userId = await getCurrentUserId();
   if (!userId) return unauthorizedResponse();
+  await ensureUser(userId);
 
   const { boardId } = await params;
   const body = await req.json();
@@ -48,7 +50,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(req: NextRequest, { params }: Params) {
-  const userId = await getCurrentUserId(req);
+  const userId = await getCurrentUserId();
   if (!userId) return unauthorizedResponse();
 
   const { boardId } = await params;

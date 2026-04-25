@@ -1,26 +1,30 @@
 import { NextRequest } from "next/server";
 import { getCurrentUserId, unauthorizedResponse } from "@/lib/auth";
+import { ensureUser } from "@/lib/auth/ensureUser";
 import {
   listBoardsForUser,
   createBoardForUser,
 } from "@/lib/controllers/board.controller";
 
 export async function GET(req: NextRequest) {
-  const userId = await getCurrentUserId(req);
+  const userId = await getCurrentUserId();
   if (!userId) return unauthorizedResponse();
+
+  await ensureUser(userId);
 
   const boards = await listBoardsForUser(userId);
   return Response.json(boards);
 }
 
 export async function POST(req: NextRequest) {
-  const userId = await getCurrentUserId(req);
+  const userId = await getCurrentUserId();
   if (!userId) return unauthorizedResponse();
+
+  await ensureUser(userId);
 
   const body = await req.json();
   const result = await createBoardForUser(userId, {
     name: body.name,
-    email: body.email,
   });
 
   if (!result.ok) {

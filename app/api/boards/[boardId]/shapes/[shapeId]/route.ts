@@ -4,6 +4,7 @@ import {
   updateShapeOnBoard,
   deleteShapeFromBoard,
 } from "@/lib/controllers/shape.controller";
+import { ensureUser } from "@/lib/auth/ensureUser";
 
 type Params = { params: Promise<{ boardId: string; shapeId: string }> };
 
@@ -12,8 +13,9 @@ function errorToStatus(error: "not_found" | "forbidden") {
 }
 
 export async function PUT(req: NextRequest, { params }: Params) {
-  const userId = await getCurrentUserId(req);
+  const userId = await getCurrentUserId();
   if (!userId) return unauthorizedResponse();
+  await ensureUser(userId);
 
   const { boardId, shapeId } = await params;
   const body = await req.json();
@@ -30,8 +32,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(req: NextRequest, { params }: Params) {
-  const userId = await getCurrentUserId(req);
+  const userId = await getCurrentUserId();
   if (!userId) return unauthorizedResponse();
+  await ensureUser(userId);
 
   const { boardId, shapeId } = await params;
   const result = await deleteShapeFromBoard(boardId, shapeId, userId);

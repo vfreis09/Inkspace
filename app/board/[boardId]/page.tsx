@@ -57,28 +57,30 @@ export default function BoardPage() {
   }
 
   return (
-    <main className="h-screen w-full overflow-hidden bg-[#fdfdfb]">
-      <div className="absolute left-4 top-4 z-10 flex items-center gap-3">
-        <button
-          onClick={() => router.push("/")}
-          className="rounded-lg border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-400 backdrop-blur-md hover:text-white"
-        >
-          ← Boards
-        </button>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2 text-white backdrop-blur-md">
-          <h1 className="text-sm font-bold">Inkspace Engine v0.2</h1>
-          <p className="text-xs opacity-60">
-            Scroll to zoom • Drag to pan • Press keys to switch tools
-          </p>
+    <main className="h-screen w-full overflow-hidden bg-[#fdfdfb] flex flex-col">
+      <div className="relative flex-1">
+        <div className="absolute left-4 top-4 z-10 flex items-center gap-3">
+          <button
+            onClick={() => router.push("/")}
+            className="rounded-lg border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-400 backdrop-blur-md hover:text-white"
+          >
+            ← Boards
+          </button>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2 text-white backdrop-blur-md">
+            <h1 className="text-sm font-bold">Inkspace Engine v0.2</h1>
+            <p className="text-xs opacity-60">
+              Scroll to zoom • Drag to pan • Press keys to switch tools
+            </p>
+          </div>
         </div>
+        <Toolbar />
+        {isColorPickerOpen && (
+          <div className="fixed left-24 top-1/2 -translate-y-1/2 z-50">
+            <ColorPicker onClose={toggleColorPicker} />
+          </div>
+        )}
+        <Canvas />
       </div>
-      <Toolbar />
-      {isColorPickerOpen && (
-        <div className="fixed left-24 top-1/2 -translate-y-1/2 z-50">
-          <ColorPicker onClose={toggleColorPicker} />
-        </div>
-      )}
-      <Canvas />
     </main>
   );
 }

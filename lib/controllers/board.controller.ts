@@ -30,7 +30,6 @@ export async function getBoardForUser(
 
 export type CreateBoardInput = {
   name: string;
-  email: string; // temporary until Clerk webhook handles user creation
 };
 
 export type CreateBoardResult =
@@ -45,11 +44,7 @@ export async function createBoardForUser(
     return { ok: false, error: "invalid_name" };
   }
 
-  const board = await createBoard(
-    userId,
-    input.name,
-    input.email ?? `${userId}@placeholder.dev`,
-  );
+  const board = await createBoard(userId, input.name);
   return { ok: true, board };
 }
 

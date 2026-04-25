@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getCurrentUserId, unauthorizedResponse } from "@/lib/auth";
 import { batchUpsertForBoard } from "@/lib/controllers/shape.controller";
+import { ensureUser } from "@/lib/auth/ensureUser";
 
 type Params = { params: Promise<{ boardId: string }> };
 
@@ -9,8 +10,9 @@ function errorToStatus(error: "not_found" | "forbidden") {
 }
 
 export async function PUT(req: NextRequest, { params }: Params) {
-  const userId = await getCurrentUserId(req);
+  const userId = await getCurrentUserId();
   if (!userId) return unauthorizedResponse();
+  ensureUser(userId);
 
   const { boardId } = await params;
   const body = await req.json();

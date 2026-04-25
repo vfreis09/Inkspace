@@ -1,14 +1,8 @@
-import { NextRequest } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 
-export async function getCurrentUserId(
-  req: NextRequest,
-): Promise<string | null> {
-  // --- TEMPORARY: read user ID from a header for local dev/testing ---
-  // When you add Clerk, replace this entire function body with:
-  //   const { userId } = await auth();
-  //   return userId;
-  const devUserId = req.headers.get("x-user-id");
-  return devUserId ?? null;
+export async function getCurrentUserId(): Promise<string | null> {
+  const { userId } = await auth();
+  return userId ?? null;
 }
 
 export function unauthorizedResponse() {

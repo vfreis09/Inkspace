@@ -4,6 +4,7 @@ import {
   listShapesForBoard,
   createShapeOnBoard,
 } from "@/lib/controllers/shape.controller";
+import { ensureUser } from "@/lib/auth/ensureUser";
 
 type Params = { params: Promise<{ boardId: string }> };
 
@@ -12,8 +13,9 @@ function errorToStatus(error: "not_found" | "forbidden") {
 }
 
 export async function GET(req: NextRequest, { params }: Params) {
-  const userId = await getCurrentUserId(req);
+  const userId = await getCurrentUserId();
   if (!userId) return unauthorizedResponse();
+  await ensureUser(userId);
 
   const { boardId } = await params;
   const result = await listShapesForBoard(boardId, userId);
@@ -29,9 +31,9 @@ export async function GET(req: NextRequest, { params }: Params) {
 }
 
 export async function POST(req: NextRequest, { params }: Params) {
-  const userId = await getCurrentUserId(req);
+  const userId = await getCurrentUserId();
   if (!userId) return unauthorizedResponse();
-
+  await ensureUser(userId);
   const { boardId } = await params;
   const body = await req.json();
   const result = await createShapeOnBoard(boardId, userId, body);

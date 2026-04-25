@@ -43,15 +43,7 @@ export async function getMemberRole(
   return member?.role ?? null;
 }
 
-export async function createBoard(userId: string, name: string, email: string) {
-  // Upsert the user so they exist before we create the board.
-  // When Clerk is added, this will be handled by a webhook instead.
-  await prisma.user.upsert({
-    where: { id: userId },
-    update: {},
-    create: { id: userId, email },
-  });
-
+export async function createBoard(userId: string, name: string) {
   return prisma.board.create({
     data: {
       name: name.trim(),
