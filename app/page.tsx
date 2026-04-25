@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useEffect } from "react";
 import Toolbar from "@/features/boards/components/Toolbar/Toolbar";
 import ColorPicker from "@/features/boards/components/ColorPicker/ColorPicker";
 import { useStore } from "@/features/boards/store/useStore";
@@ -20,6 +21,29 @@ const Canvas = dynamic(
 export default function Home() {
   const isColorPickerOpen = useStore((state) => state.isColorPickerOpen);
   const toggleColorPicker = useStore((state) => state.toggleColorPicker);
+  const initBoard = useStore((state) => state.initBoard);
+  const isBoardLoading = useStore((state) => state.isBoardLoading);
+  const boardError = useStore((state) => state.boardError);
+
+  useEffect(() => {
+    initBoard();
+  }, []);
+
+  if (boardError) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-zinc-900 text-rose-400">
+        <p className="text-sm">{boardError}</p>
+      </div>
+    );
+  }
+
+  if (isBoardLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-zinc-900 text-white">
+        <p className="text-sm opacity-60">Connecting to board...</p>
+      </div>
+    );
+  }
 
   return (
     <main className="h-screen w-full overflow-hidden bg-[#fdfdfb]">

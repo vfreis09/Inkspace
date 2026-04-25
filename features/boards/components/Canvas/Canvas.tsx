@@ -334,25 +334,25 @@ export default function Canvas() {
     }
   };
 
-  const handleMouseUp = () => {
-    if (selectionRect) {
-      const overlapping = shapes
-        .filter(
-          (s) =>
-            s.x >= selectionRect.x &&
-            s.x + s.width <= selectionRect.x + selectionRect.width &&
-            s.y >= selectionRect.y &&
-            s.y + s.height <= selectionRect.y + selectionRect.height,
-        )
-        .map((s) => s.id);
-      selectShapes(overlapping);
-      setSelectionRect(null);
-    } else if (localCurrentShape) {
-      addShape(localCurrentShape as Omit<Shape, "id">);
-      setLocalCurrentShape(null);
-    }
-    setDrawStart(null);
-  };
+  const handleMouseUp = async () => {
+  if (selectionRect) {
+    const overlapping = shapes
+      .filter(
+        (s) =>
+          s.x >= selectionRect.x &&
+          s.x + s.width <= selectionRect.x + selectionRect.width &&
+          s.y >= selectionRect.y &&
+          s.y + s.height <= selectionRect.y + selectionRect.height,
+      )
+      .map((s) => s.id);
+    selectShapes(overlapping);
+    setSelectionRect(null);
+  } else if (localCurrentShape) {
+    await addShape(localCurrentShape as Omit<Shape, "id">);
+    setLocalCurrentShape(null);
+  }
+  setDrawStart(null);
+};
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-[#f8f8f7]">
