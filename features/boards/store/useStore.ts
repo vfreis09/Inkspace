@@ -57,13 +57,17 @@ interface CanvasState {
   };
   canUndo: boolean;
   canRedo: boolean;
-  initBoard: () => Promise<void>;
   loadBoard: (boardId: string) => Promise<void>;
   setTool: (tool: Tool) => void;
   setIsDrawing: (drawing: boolean) => void;
   setBrushSize: (size: number) => void;
   setActiveTarget: (target: "fill" | "stroke") => void;
-  setTargetColor: (color: string, overrideTarget?: "fill" | "stroke") => void;
+
+  setTargetColor: (
+    color: string,
+    overrideTarget?: "fill" | "stroke",
+  ) => Promise<void>;
+
   toggleColorPicker: () => void;
   addShape: (shape: Omit<Shape, "id">) => Promise<void>;
   updateShape: (id: string, newProps: Partial<Shape>) => Promise<void>;
@@ -101,23 +105,6 @@ export const useStore = create<CanvasState>((set, get) => ({
   history: { past: [], future: [] },
   canUndo: false,
   canRedo: false,
-
-  initBoard: async () => {
-    set({ isBoardLoading: true, boardError: null });
-    try {
-      const boards = await apiFetchBoards();
-      if (boards.length > 0) {
-        await get().loadBoard(boards[0].id);
-      } else {
-        const board = await apiCreateBoard("My Board");
-        await get().loadBoard(board.id);
-      }
-    } catch {
-      set({ boardError: "Failed to load board. Is the server running?" });
-    } finally {
-      set({ isBoardLoading: false });
-    }
-  },
 
   loadBoard: async (boardId: string) => {
     set({ isBoardLoading: true, boardError: null, currentBoardId: boardId });
@@ -162,11 +149,15 @@ export const useStore = create<CanvasState>((set, get) => ({
 
   setActiveTarget: (target) => set({ activeTarget: target }),
 
-  setTargetColor: (color, overrideTarget) => {
+  setTargetColor: async (color, overrideTarget) => {
     const prev = snapshotFromState(get());
+
+    const affectedIds = [...get().selectedIds];
+    const { currentBoardId } = get();
+    const target = overrideTarget || get().activeTarget;
+
     set((state) => {
       const draft = produce(state, (d: Draft<CanvasState>) => {
-        const target = overrideTarget || d.activeTarget;
         if (target === "fill") d.activeFill = color;
         else d.activeStroke = color;
         d.selectedIds.forEach((id) => {
@@ -181,6 +172,16 @@ export const useStore = create<CanvasState>((set, get) => ({
         canRedo: false,
       };
     });
+
+    if (currentBoardId && affectedIds.length > 0) {
+      await Promise.all(
+        affectedIds.map((id) =>
+          apiUpdateShape(currentBoardId, id, { [target]: color }).catch(() =>
+            console.error(`Failed to update ${target} for shape ${id}`),
+          ),
+        ),
+      );
+    }
   },
 
   toggleColorPicker: () =>

@@ -1,7 +1,6 @@
 const BASE = "/api";
 
-// Temporary: hardcoded user ID until Clerk is added.
-// When Clerk is ready, replace this with the real token from Clerk's useAuth().
+// Temporary until Clerk is added
 const DEV_USER_ID = "user_test123";
 
 function headers() {
@@ -21,15 +20,31 @@ export async function apiCreateBoard(name: string) {
   const res = await fetch(`${BASE}/boards`, {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ name, email: `${DEV_USER_ID}@placeholder.dev` }),
+    body: JSON.stringify({
+      name,
+      email: `${DEV_USER_ID}@placeholder.dev`,
+    }),
   });
   if (!res.ok) throw new Error("Failed to create board");
   return res.json();
 }
 
-export async function apiGetBoard(boardId: string) {
-  const res = await fetch(`${BASE}/boards/${boardId}`, { headers: headers() });
-  if (!res.ok) throw new Error("Failed to get board");
+export async function apiUpdateBoard(boardId: string, name: string) {
+  const res = await fetch(`${BASE}/boards/${boardId}`, {
+    method: "PUT",
+    headers: headers(),
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error("Failed to update board");
+  return res.json();
+}
+
+export async function apiDeleteBoard(boardId: string) {
+  const res = await fetch(`${BASE}/boards/${boardId}`, {
+    method: "DELETE",
+    headers: headers(),
+  });
+  if (!res.ok) throw new Error("Failed to delete board");
   return res.json();
 }
 
@@ -72,19 +87,5 @@ export async function apiDeleteShapes(boardId: string, ids: string[]) {
     body: JSON.stringify({ shapes: [], deletedIds: ids }),
   });
   if (!res.ok) throw new Error("Failed to delete shapes");
-  return res.json();
-}
-
-export async function apiBatchSave(
-  boardId: string,
-  shapes: object[],
-  deletedIds: string[],
-) {
-  const res = await fetch(`${BASE}/boards/${boardId}/shapes/batch`, {
-    method: "PUT",
-    headers: headers(),
-    body: JSON.stringify({ shapes, deletedIds }),
-  });
-  if (!res.ok) throw new Error("Failed to batch save");
   return res.json();
 }
