@@ -1,49 +1,46 @@
 import { NextRequest } from "next/server";
-import { getCurrentUserId, unauthorizedResponse } from "@/lib/auth";
+import { auth } from "@clerk/nextjs/server";
 import {
   updateShapeOnBoard,
   deleteShapeFromBoard,
 } from "@/lib/controllers/shape.controller";
-import { ensureUser } from "@/lib/auth/ensureUser";
 
 type Params = { params: Promise<{ boardId: string; shapeId: string }> };
 
-function errorToStatus(error: "not_found" | "forbidden") {
+function errorToStatus(error: string) {
   return error === "not_found" ? 404 : 403;
 }
 
 export async function PUT(req: NextRequest, { params }: Params) {
-  const userId = await getCurrentUserId();
-  if (!userId) return unauthorizedResponse();
-  await ensureUser(userId);
+  const { userId } = await auth();
+  if (!userId) return new Response("Unauthorized", { status: 401 });
 
   const { boardId, shapeId } = await params;
   const body = await req.json();
   const result = await updateShapeOnBoard(boardId, shapeId, userId, body);
 
   if (!result.ok) {
-    return Response.json(
-      { error: result.error },
-      { status: errorToStatus(result.error) },
-    );
+    const error = result.error;
+    if (!error)
+      return Response.json({ error: "Unknown error" }, { status: 500 });
+    return Response.json({ error }, { status: errorToStatus(error) });
   }
 
   return Response.json(result.shape);
 }
 
 export async function DELETE(req: NextRequest, { params }: Params) {
-  const userId = await getCurrentUserId();
-  if (!userId) return unauthorizedResponse();
-  await ensureUser(userId);
+  const { userId } = await auth();
+  if (!userId) return new Response("Unauthorized", { status: 401 });
 
   const { boardId, shapeId } = await params;
   const result = await deleteShapeFromBoard(boardId, shapeId, userId);
 
   if (!result.ok) {
-    return Response.json(
-      { error: result.error },
-      { status: errorToStatus(result.error) },
-    );
+    const error = result.error;
+    if (!error)
+      return Response.json({ error: "Unknown error" }, { status: 500 });
+    return Response.json({ error }, { status: errorToStatus(error) });
   }
 
   return Response.json({ deleted: true });

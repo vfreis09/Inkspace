@@ -1,17 +1,14 @@
-import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 
-export async function ensureUser(userId: string) {
-  const user = await currentUser();
-
+export async function ensureUser(userId: string, email: string, name: string) {
   return prisma.user.upsert({
     where: { id: userId },
-    update: {},
+    update: { email, name },
     create: {
       id: userId,
-      email: user?.emailAddresses[0]?.emailAddress ?? "",
-      name: user?.fullName ?? "",
-      avatarUrl: user?.imageUrl ?? "",
+      email,
+      name,
+      avatarUrl: "",
     },
   });
 }

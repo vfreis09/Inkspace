@@ -7,15 +7,56 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
-import { Stage, Layer, Rect, Transformer } from "react-konva";
+import { Stage, Layer, Rect, Transformer, Group, Path } from "react-konva";
 import { useStore } from "@/features/boards/store/useStore";
-import type { Shape, ShapeType } from "@/features/boards/store/useStore";
+import type {
+  Shape,
+  ShapeType,
+  Action,
+} from "@/features/boards/store/useStore";
 import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
 import type { Stage as KonvaStage } from "konva/lib/Stage";
 import type { Transformer as KonvaTransformer } from "konva/lib/shapes/Transformer";
 import { MemoizedShape } from "@/features/boards/components/MemoizedShape/MemoizedShape";
 
-export default function Canvas() {
+export type RemoteCursor = {
+  connectionId: string;
+  userId: string;
+  name: string;
+  color: string;
+  x: number;
+  y: number;
+};
+
+type CanvasProps = {
+  onCursorMove?: (x: number, y: number) => void;
+  onShapeAdd?: (shape: Shape) => void;
+  onShapeUpdate?: (shapeId: string, props: Partial<Shape>) => void;
+  onShapeDelete?: (ids: string[]) => void;
+  cursors: RemoteCursor[];
+};
+
+export default function Canvas({
+  onCursorMove,
+  onShapeAdd,
+  onShapeUpdate,
+  onShapeDelete,
+  cursors,
+}: CanvasProps) {
+  const {
+    shapes,
+    addShapeLocally,
+    updateShapeLocally,
+    deleteShapesLocally,
+    currentTool,
+    selectedIds,
+    selectShapes,
+    brushSize,
+    undo,
+    redo,
+    setBroadcast,
+  } = useStore();
+
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [gridImage, setGridImage] = useState<HTMLImageElement | undefined>(
@@ -33,22 +74,6 @@ export default function Canvas() {
     height: number;
   } | null>(null);
 
-  const [isZooming, setIsZooming] = useState(false);
-  const zoomTimer = useRef<NodeJS.Timeout | null>(null);
-
-  const {
-    shapes,
-    addShape,
-    updateShape,
-    currentTool,
-    selectedIds,
-    selectShapes,
-    deleteShapes,
-    brushSize,
-    undo,
-    redo,
-  } = useStore();
-
   const stageRef = useRef<KonvaStage | null>(null);
   const trRef = useRef<KonvaTransformer | null>(null);
 
@@ -58,45 +83,11 @@ export default function Canvas() {
   );
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        (e.key === "Delete" || e.key === "Backspace") &&
-        selectedIds.length > 0
-      ) {
-        if (e.target === document.body) {
-          e.preventDefault();
-          deleteShapes(selectedIds);
-        }
-      }
-
-      if (
-        (e.ctrlKey || e.metaKey) &&
-        !e.shiftKey &&
-        e.key.toLowerCase() === "z"
-      ) {
-        e.preventDefault();
-        undo();
-      }
-
-      if (
-        (e.ctrlKey || e.metaKey) &&
-        (e.key.toLowerCase() === "y" ||
-          (e.shiftKey && e.key.toLowerCase() === "z"))
-      ) {
-        e.preventDefault();
-        redo();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedIds, deleteShapes, undo, redo]);
-
-  useEffect(() => {
-    const checkSize = () =>
+    const check = () =>
       setSize({ width: window.innerWidth, height: window.innerHeight });
-    checkSize();
-    window.addEventListener("resize", checkSize);
-    return () => window.removeEventListener("resize", checkSize);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
   }, []);
 
   useEffect(() => {
@@ -105,7 +96,6 @@ export default function Canvas() {
     canvas.width = step;
     canvas.height = step;
     const ctx = canvas.getContext("2d");
-
     if (ctx) {
       ctx.strokeStyle = "#d1d1ca";
       ctx.lineWidth = 1;
@@ -125,98 +115,116 @@ export default function Canvas() {
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage || !trRef.current) return;
-
     const nodes = selectedIds
       .map((id) => stage.findOne("#" + id))
       .filter((n): n is KonvaNode => !!n);
-
-    trRef.current?.nodes(nodes);
-    trRef.current?.getLayer()?.batchDraw();
+    trRef.current.nodes(nodes);
+    trRef.current.getLayer()?.batchDraw();
   }, [selectedIds]);
 
+  const broadcastAction = useCallback(
+    (action: Action, isUndo: boolean) => {
+      switch (action.type) {
+        case "ADD":
+          if (isUndo) {
+            onShapeDelete?.([action.shape.id]);
+          } else {
+            onShapeAdd?.(action.shape);
+          }
+          break;
+        case "DELETE":
+          if (isUndo) {
+            action.shapes.forEach((s) => onShapeAdd?.(s));
+          } else {
+            onShapeDelete?.(action.shapes.map((s) => s.id));
+          }
+          break;
+        case "UPDATE":
+          onShapeUpdate?.(
+            action.id,
+            isUndo ? action.oldProps : action.newProps,
+          );
+          break;
+        case "UPDATE_BATCH":
+          action.updates.forEach((u) =>
+            onShapeUpdate?.(u.id, isUndo ? u.oldProps : u.newProps),
+          );
+          break;
+      }
+    },
+    [onShapeAdd, onShapeUpdate, onShapeDelete],
+  );
+
   useEffect(() => {
-    if (trRef.current && selectedIds.length > 0) {
-      trRef.current.forceUpdate();
-      trRef.current.getLayer()?.batchDraw();
-    }
-  }, [camera.scale, selectedIds.length]);
+    setBroadcast((action: Action) => broadcastAction(action, false));
+    return () => setBroadcast(null);
+  }, [setBroadcast, broadcastAction]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target !== document.body) return;
+
+      if (
+        (e.key === "Delete" || e.key === "Backspace") &&
+        selectedIds.length > 0
+      ) {
+        e.preventDefault();
+        const ids = [...selectedIds];
+        deleteShapesLocally(ids);
+        onShapeDelete?.(ids);
+      }
+
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "z"
+      ) {
+        e.preventDefault();
+        const action = undo();
+        if (action) broadcastAction(action, true);
+      }
+
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.key.toLowerCase() === "y" ||
+          (e.shiftKey && e.key.toLowerCase() === "z"))
+      ) {
+        e.preventDefault();
+        const action = redo();
+        if (action) broadcastAction(action, false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    selectedIds,
+    deleteShapesLocally,
+    undo,
+    redo,
+    onShapeDelete,
+    broadcastAction,
+  ]);
 
   const getPointerPosition = (stage: KonvaStage) => {
     const pos = stage.getPointerPosition();
-    if (!pos) return { x: 0, y: 0 };
-    return stage.getAbsoluteTransform().copy().invert().point(pos);
+    return pos
+      ? stage.getAbsoluteTransform().copy().invert().point(pos)
+      : { x: 0, y: 0 };
   };
-
-  const handleWheel = (e: KonvaEventObject<WheelEvent>) => {
-    e.evt.preventDefault();
-    const stage = stageRef.current;
-    if (!stage) return;
-
-    setIsZooming(true);
-    if (zoomTimer.current) clearTimeout(zoomTimer.current);
-    zoomTimer.current = setTimeout(() => setIsZooming(false), 100);
-
-    const oldScale = stage.scaleX();
-    const pointer = stage.getPointerPosition();
-    if (!pointer) return;
-
-    const mousePointTo = {
-      x: (pointer.x - stage.x()) / oldScale,
-      y: (pointer.y - stage.y()) / oldScale,
-    };
-
-    let newScale = e.evt.deltaY < 0 ? oldScale * 1.1 : oldScale / 1.1;
-    newScale = Math.min(Math.max(newScale, 0.001), 50);
-
-    setCamera({
-      scale: newScale,
-      x: pointer.x - mousePointTo.x * newScale,
-      y: pointer.y - mousePointTo.y * newScale,
-    });
-  };
-
-  const handleDragMove = useCallback(
-    (e: KonvaEventObject<DragEvent>) => {
-      if (selectedIds.includes(e.target.id()) && trRef.current) {
-        trRef.current.getLayer()?.batchDraw();
-      }
-    },
-    [selectedIds],
-  );
 
   const handleDragEnd = useCallback(
     (id: string, type: string, width: number, height: number) =>
       (e: KonvaEventObject<DragEvent>) => {
-        const stage = e.target.getStage();
-        if (!stage) return;
-
-        if (selectedIds.includes(id)) {
-          selectedIds.forEach((sid) => {
-            const node = stage.findOne("#" + sid);
-            if (!node) return;
-            const shape = useStore.getState().shapes.find((s) => s.id === sid);
-            if (shape?.type === "circle") {
-              updateShape(sid, {
-                x: node.x() - shape.width / 2,
-                y: node.y() - shape.height / 2,
-              });
-            } else {
-              updateShape(sid, { x: node.x(), y: node.y() });
-            }
-          });
-        } else {
-          updateShape(
-            id,
-            type === "circle"
-              ? {
-                  x: e.target.x() - width / 2,
-                  y: e.target.y() - height / 2,
-                }
-              : { x: e.target.x(), y: e.target.y() },
-          );
-        }
+        const n = e.target;
+        const props =
+          type === "circle"
+            ? { x: n.x() - width / 2, y: n.y() - height / 2 }
+            : { x: n.x(), y: n.y() };
+        updateShapeLocally(id, props, true);
+        onShapeUpdate?.(id, props);
       },
-    [selectedIds, updateShape],
+    [updateShapeLocally, onShapeUpdate],
   );
 
   const handleTransformEnd = useCallback(
@@ -227,62 +235,53 @@ export default function Canvas() {
         const sy = n.scaleY();
         n.scaleX(1);
         n.scaleY(1);
-
+        let props: Partial<Shape> = {
+          x: n.x(),
+          y: n.y(),
+          rotation: n.rotation(),
+        };
         if (type === "rect") {
-          updateShape(id, {
-            x: n.x(),
-            y: n.y(),
-            rotation: n.rotation(),
-            width: Math.max(5, n.width() * sx),
-            height: Math.max(5, n.height() * sy),
-          });
+          props.width = Math.max(5, n.width() * sx);
+          props.height = Math.max(5, n.height() * sy);
         } else if (type === "circle") {
-          const newWidth = Math.max(5, n.width() * sx);
-          const newHeight = Math.max(5, n.height() * sy);
-          updateShape(id, {
-            x: n.x() - newWidth / 2,
-            y: n.y() - newHeight / 2,
-            rotation: n.rotation(),
-            width: newWidth,
-            height: newHeight,
-          });
+          const nw = Math.max(5, n.width() * sx);
+          const nh = Math.max(5, n.height() * sy);
+          props = {
+            ...props,
+            x: n.x() - nw / 2,
+            y: n.y() - nh / 2,
+            width: nw,
+            height: nh,
+          };
         } else {
-          updateShape(id, {
-            x: n.x(),
-            y: n.y(),
-            rotation: n.rotation(),
-            points: (oldPoints ?? [0, 0, 0, 0]).map((p, i) =>
-              i % 2 === 0 ? p * sx : p * sy,
-            ),
-          });
+          props.points = (oldPoints ?? [0, 0, 0, 0]).map((p, i) =>
+            i % 2 === 0 ? p * sx : p * sy,
+          );
         }
+        updateShapeLocally(id, props, true);
+        onShapeUpdate?.(id, props);
       },
-    [updateShape],
+    [updateShapeLocally, onShapeUpdate],
   );
 
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     const stage = e.target.getStage();
     if (!stage) return;
     const pos = getPointerPosition(stage);
-    const clickedOnStage = e.target === stage;
 
     if (currentTool === "select") {
-      const id = e.target.id();
-      if (id && selectedIds.includes(id)) return;
-      if (clickedOnStage) {
+      if (e.target === stage) {
         selectShapes([]);
         setDrawStart(pos);
         setSelectionRect({ ...pos, width: 0, height: 0 });
-      } else if (id) {
-        selectShapes([id]);
+      } else if (e.target.id()) {
+        selectShapes([e.target.id()]);
       }
       return;
     }
 
-    if (currentTool === "pan") return;
-
     if (
-      clickedOnStage &&
+      e.target === stage &&
       ["rect", "circle", "line", "arrow"].includes(currentTool)
     ) {
       setDrawStart(pos);
@@ -307,10 +306,14 @@ export default function Canvas() {
 
   const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
     const stage = e.target.getStage();
-    if (!stage || !drawStart) return;
+    if (!stage) return;
     const pos = getPointerPosition(stage);
 
-    if (currentTool === "select" && selectionRect) {
+    onCursorMove?.(pos.x, pos.y);
+
+    if (!drawStart) return;
+
+    if (selectionRect) {
       setSelectionRect({
         x: Math.min(pos.x, drawStart.x),
         y: Math.min(pos.y, drawStart.y),
@@ -320,16 +323,20 @@ export default function Canvas() {
     } else if (localCurrentShape) {
       const w = pos.x - drawStart.x;
       const h = pos.y - drawStart.y;
-      if (currentTool === "rect" || currentTool === "circle") {
-        setLocalCurrentShape({
-          ...localCurrentShape,
+
+      if (currentTool === "line" || currentTool === "arrow") {
+        setLocalCurrentShape((prev) => ({
+          ...prev,
+          points: [0, 0, w, h],
+        }));
+      } else {
+        setLocalCurrentShape((prev) => ({
+          ...prev,
           width: Math.abs(w),
           height: Math.abs(h),
           x: w < 0 ? pos.x : drawStart.x,
           y: h < 0 ? pos.y : drawStart.y,
-        });
-      } else {
-        setLocalCurrentShape({ ...localCurrentShape, points: [0, 0, w, h] });
+        }));
       }
     }
   };
@@ -348,17 +355,21 @@ export default function Canvas() {
       selectShapes(overlapping);
       setSelectionRect(null);
     } else if (localCurrentShape) {
-      const shapeToAdd = localCurrentShape;
+      const shape: Shape = {
+        ...(localCurrentShape as Shape),
+        id: crypto.randomUUID(),
+      };
       setLocalCurrentShape(null);
-      setDrawStart(null);
-      addShape(shapeToAdd as Omit<Shape, "id">);
-      return;
+      addShapeLocally(shape);
+      onShapeAdd?.(shape);
     }
     setDrawStart(null);
   };
 
+  if (size.width === 0) return null;
+
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[#f8f8f7]">
+    <div className="h-screen w-screen bg-[#f8f8f7]">
       <Stage
         ref={stageRef}
         width={size.width}
@@ -371,7 +382,25 @@ export default function Canvas() {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onWheel={handleWheel}
+        onWheel={(e) => {
+          e.evt.preventDefault();
+          const s = stageRef.current;
+          if (!s) return;
+          const oldScale = s.scaleX();
+          const pointer = s.getPointerPosition();
+          if (!pointer) return;
+          const mousePointTo = {
+            x: (pointer.x - s.x()) / oldScale,
+            y: (pointer.y - s.y()) / oldScale,
+          };
+          let newScale = e.evt.deltaY < 0 ? oldScale * 1.1 : oldScale / 1.1;
+          newScale = Math.min(Math.max(newScale, 0.001), 50);
+          setCamera({
+            scale: newScale,
+            x: pointer.x - mousePointTo.x * newScale,
+            y: pointer.y - mousePointTo.y * newScale,
+          });
+        }}
         onDragMove={(e) =>
           e.target === e.target.getStage() &&
           setCamera((prev) => ({ ...prev, x: e.target.x(), y: e.target.y() }))
@@ -399,24 +428,15 @@ export default function Canvas() {
               isSelected={selectedIds.includes(s.id)}
               isSelectMode={currentTool === "select"}
               cameraScale={camera.scale}
-              onDragMove={handleDragMove}
+              onDragMove={() => {}}
               onDragEnd={handleDragEnd(s.id, s.type, s.width, s.height)}
               onTransformEnd={handleTransformEnd(s.id, s.type, s.points)}
             />
           ))}
-          {selectionRect && (
-            <Rect
-              {...selectionRect}
-              fill="rgba(99, 102, 241, 0.1)"
-              stroke="#6366f1"
-              strokeWidth={Math.min(1 / camera.scale, 2)}
-              dash={[4 / camera.scale, 2 / camera.scale]}
-              listening={false}
-            />
-          )}
           {localCurrentShape && (
             <MemoizedShape
-              shape={{ ...localCurrentShape, id: "preview" } as Shape}
+              key="preview"
+              shape={{ ...(localCurrentShape as Shape), id: "preview" }}
               isSelected={false}
               isSelectMode={false}
               cameraScale={camera.scale}
@@ -425,20 +445,46 @@ export default function Canvas() {
               onTransformEnd={() => {}}
             />
           )}
+          {selectionRect && (
+            <Rect
+              {...selectionRect}
+              fill="rgba(99, 102, 241, 0.1)"
+              stroke="#6366f1"
+              strokeWidth={1 / camera.scale}
+              dash={[4 / camera.scale, 2 / camera.scale]}
+              listening={false}
+            />
+          )}
           {selectedIds.length > 0 && (
             <Transformer
               ref={trRef}
-              opacity={isZooming ? 0 : 1}
               rotateEnabled
-              ignoreStroke={true}
-              anchorSize={Math.min(8 / camera.scale, 20)}
-              borderStrokeWidth={Math.min(1 / camera.scale, 2)}
-              anchorStrokeWidth={Math.min(1 / camera.scale, 2)}
+              ignoreStroke
+              anchorSize={10 / camera.scale}
+              borderStrokeWidth={1 / camera.scale}
               boundBoxFunc={(oldB, newB) =>
                 Math.abs(newB.width) < 5 / camera.scale ? oldB : newB
               }
             />
           )}
+        </Layer>
+        <Layer listening={false}>
+          {cursors.map((c) => (
+            <Group
+              key={c.connectionId}
+              x={c.x}
+              y={c.y}
+              scaleX={1 / camera.scale}
+              scaleY={1 / camera.scale}
+            >
+              <Path
+                data="M 0 0 L 12 5 L 7 7 L 10 13 L 8 14 L 5 8 L 0 12 Z"
+                fill={c.color}
+                stroke="white"
+                strokeWidth={1}
+              />
+            </Group>
+          ))}
         </Layer>
       </Stage>
     </div>

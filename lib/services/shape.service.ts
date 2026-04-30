@@ -19,7 +19,7 @@ export type ShapeUpdateInput = Partial<Omit<ShapeCreateInput, "type">>;
 
 export type BatchInput = {
   id?: string;
-} & ShapeCreateInput;
+} & Partial<ShapeCreateInput>;
 
 export async function getShapesByBoardId(boardId: string) {
   return prisma.shape.findMany({
@@ -92,7 +92,6 @@ export async function deleteShape(shapeId: string) {
   return prisma.shape.delete({ where: { id: shapeId } });
 }
 
-// Called by the batch route — PartyKit will use this as its persistence sink
 export async function batchUpsertShapes(
   boardId: string,
   userId: string,
@@ -107,29 +106,34 @@ export async function batchUpsertShapes(
     }
 
     for (const shape of shapes) {
-      const payload = {
-        type: shape.type,
-        x: shape.x,
-        y: shape.y,
-        width: shape.width,
-        height: shape.height,
-        rotation: shape.rotation ?? 0,
-        fill: shape.fill,
-        stroke: shape.stroke,
-        strokeWidth: shape.strokeWidth,
-        points: shape.points ?? [],
-        order: shape.order ?? 0,
-        lastEditedBy: userId,
-      };
+      if (!shape.id) continue;
 
-      if (shape.id) {
+      const payload: Record<string, any> = { lastEditedBy: userId };
+
+      if (shape.type !== undefined) payload.type = shape.type;
+      if (shape.x !== undefined) payload.x = shape.x;
+      if (shape.y !== undefined) payload.y = shape.y;
+      if (shape.width !== undefined) payload.width = shape.width;
+      if (shape.height !== undefined) payload.height = shape.height;
+      if (shape.rotation !== undefined) payload.rotation = shape.rotation;
+      if (shape.fill !== undefined) payload.fill = shape.fill;
+      if (shape.stroke !== undefined) payload.stroke = shape.stroke;
+      if (shape.strokeWidth !== undefined)
+        payload.strokeWidth = shape.strokeWidth;
+      if (shape.points !== undefined) payload.points = shape.points;
+      if (shape.order !== undefined) payload.order = shape.order;
+
+      if (payload.type) {
         await tx.shape.upsert({
           where: { id: shape.id },
           update: payload,
-          create: { id: shape.id, boardId, ...payload },
+          create: { id: shape.id, boardId, ...payload } as any,
         });
       } else {
-        await tx.shape.create({ data: { boardId, ...payload } });
+        await tx.shape.updateMany({
+          where: { id: shape.id, boardId },
+          data: payload,
+        });
       }
     }
 

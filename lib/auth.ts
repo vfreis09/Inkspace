@@ -1,8 +1,13 @@
 import { auth } from "@clerk/nextjs/server";
+import { NextRequest } from "next/server";
 
 export async function getCurrentUserId(): Promise<string | null> {
   const { userId } = await auth();
   return userId ?? null;
+}
+
+export function isPartyKitRequest(req: NextRequest): boolean {
+  return req.headers.get("x-partykit-secret") === process.env.PARTYKIT_SECRET;
 }
 
 export function unauthorizedResponse() {

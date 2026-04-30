@@ -1,37 +1,39 @@
-import { NextRequest } from "next/server";
-import { getCurrentUserId, unauthorizedResponse } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+import { isPartyKitRequest } from "@/lib/auth";
 import { batchUpsertForBoard } from "@/lib/controllers/shape.controller";
-import { ensureUser } from "@/lib/auth/ensureUser";
 
-type Params = { params: Promise<{ boardId: string }> };
-
-function errorToStatus(error: "not_found" | "forbidden") {
-  return error === "not_found" ? 404 : 403;
-}
-
-export async function PUT(req: NextRequest, { params }: Params) {
-  const userId = await getCurrentUserId();
-  if (!userId) return unauthorizedResponse();
-  ensureUser(userId);
-
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ boardId: string }> },
+) {
   const { boardId } = await params;
   const body = await req.json();
+  const { shapes = [], deletedIds = [] } = body;
 
-  const shapes = body.shapes ?? [];
-  const deletedIds = body.deletedIds ?? [];
+  let executorId: string | null = null;
 
-  const result = await batchUpsertForBoard(boardId, userId, shapes, deletedIds);
-
-  if (!result.ok) {
-    return Response.json(
-      { error: result.error },
-      { status: errorToStatus(result.error) },
-    );
+  if (isPartyKitRequest(req)) {
+    executorId = "system_partykit";
+  } else {
+    const { userId } = await auth();
+    executorId = userId;
   }
 
-  return Response.json({
-    ok: true,
-    upserted: result.upserted,
-    deleted: result.deleted,
-  });
+  if (!executorId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const result = await batchUpsertForBoard(
+    boardId,
+    executorId,
+    shapes,
+    deletedIds,
+  );
+
+  if (!result.ok) {
+    return NextResponse.json({ error: "Sync failed" }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
 }

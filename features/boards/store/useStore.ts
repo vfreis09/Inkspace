@@ -1,13 +1,6 @@
 import { create } from "zustand";
 import { produce, Draft } from "immer";
-import {
-  apiCreateShape,
-  apiUpdateShape,
-  apiDeleteShapes,
-  apiFetchShapes,
-  apiCreateBoard,
-  apiFetchBoards,
-} from "@/features/boards/services/boardApi";
+import { apiFetchShapes } from "@/features/boards/services/boardApi";
 
 export type ShapeType = "rect" | "circle" | "line" | "arrow";
 export type Tool = "select" | "rect" | "circle" | "line" | "arrow" | "pan";
@@ -26,17 +19,23 @@ export type Shape = {
   points?: number[];
 };
 
-type HistorySnapshot = {
-  shapes: Shape[];
-  currentTool: Tool;
-  isDrawing: boolean;
-  selectedIds: string[];
-  activeFill: string;
-  activeStroke: string;
-  activeTarget: "fill" | "stroke";
-  brushSize: number;
-  isColorPickerOpen: boolean;
-};
+export type Action =
+  | { type: "ADD"; shape: Shape }
+  | {
+      type: "UPDATE";
+      id: string;
+      oldProps: Partial<Shape>;
+      newProps: Partial<Shape>;
+    }
+  | {
+      type: "UPDATE_BATCH";
+      updates: {
+        id: string;
+        oldProps: Partial<Shape>;
+        newProps: Partial<Shape>;
+      }[];
+    }
+  | { type: "DELETE"; shapes: Shape[] };
 
 interface CanvasState {
   currentBoardId: string | null;
@@ -51,43 +50,38 @@ interface CanvasState {
   activeTarget: "fill" | "stroke";
   brushSize: number;
   isColorPickerOpen: boolean;
-  history: {
-    past: HistorySnapshot[];
-    future: HistorySnapshot[];
-  };
+  history: { past: Action[]; future: Action[] };
   canUndo: boolean;
   canRedo: boolean;
+
+  broadcast: ((action: Action) => void) | null;
+  setBroadcast: (fn: ((action: Action) => void) | null) => void;
+
   loadBoard: (boardId: string) => Promise<void>;
   setTool: (tool: Tool) => void;
   setIsDrawing: (drawing: boolean) => void;
   setBrushSize: (size: number) => void;
   setActiveTarget: (target: "fill" | "stroke") => void;
-
-  setTargetColor: (
-    color: string,
-    overrideTarget?: "fill" | "stroke",
-  ) => Promise<void>;
-
+  setTargetColor: (color: string, overrideTarget?: "fill" | "stroke") => void;
   toggleColorPicker: () => void;
-  addShape: (shape: Omit<Shape, "id">) => Promise<void>;
-  updateShape: (id: string, newProps: Partial<Shape>) => Promise<void>;
-  deleteShapes: (ids: string[]) => Promise<void>;
-  selectShapes: (ids: string[]) => void;
-  undo: () => void;
-  redo: () => void;
-}
 
-const snapshotFromState = (state: CanvasState): HistorySnapshot => ({
-  shapes: state.shapes,
-  currentTool: state.currentTool,
-  isDrawing: state.isDrawing,
-  selectedIds: state.selectedIds,
-  activeFill: state.activeFill,
-  activeStroke: state.activeStroke,
-  activeTarget: state.activeTarget,
-  brushSize: state.brushSize,
-  isColorPickerOpen: state.isColorPickerOpen,
-});
+  addShapeLocally: (shape: Shape) => void;
+  updateShapeLocally: (
+    id: string,
+    props: Partial<Shape>,
+    addToHistory?: boolean,
+  ) => void;
+  deleteShapesLocally: (ids: string[]) => void;
+  selectShapes: (ids: string[]) => void;
+
+  undo: () => Action | null;
+  redo: () => Action | null;
+
+  addShapeFromRemote: (shape: Shape) => void;
+  updateShapeFromRemote: (id: string, props: Partial<Shape>) => void;
+  deleteShapesFromRemote: (ids: string[]) => void;
+  replaceShapesFromRemote: (shapes: Shape[]) => void;
+}
 
 export const useStore = create<CanvasState>((set, get) => ({
   currentBoardId: null,
@@ -106,224 +100,272 @@ export const useStore = create<CanvasState>((set, get) => ({
   canUndo: false,
   canRedo: false,
 
+  broadcast: null,
+  setBroadcast: (fn) => set({ broadcast: fn }),
+
   loadBoard: async (boardId: string) => {
-    set({ isBoardLoading: true, boardError: null, currentBoardId: boardId });
+    set({ isBoardLoading: true, boardError: null });
     try {
       const shapes = await apiFetchShapes(boardId);
       set({
         shapes,
+        currentBoardId: boardId,
         history: { past: [], future: [] },
         canUndo: false,
         canRedo: false,
+        isBoardLoading: false,
       });
     } catch {
-      set({ boardError: "Failed to load shapes." });
-    } finally {
-      set({ isBoardLoading: false });
+      set({ boardError: "Failed to load board", isBoardLoading: false });
     }
   },
 
-  setTool: (tool) => {
-    const prev = snapshotFromState(get());
-    set((state) => ({
-      ...state,
-      history: { past: [...state.history.past, prev], future: [] },
-      canUndo: true,
-      canRedo: false,
-      currentTool: tool,
-    }));
-  },
-
+  setTool: (tool) => set({ currentTool: tool }),
   setIsDrawing: (drawing) => set({ isDrawing: drawing }),
-
-  setBrushSize: (size) => {
-    const prev = snapshotFromState(get());
-    set((state) => ({
-      ...state,
-      history: { past: [...state.history.past, prev], future: [] },
-      canUndo: true,
-      canRedo: false,
-      brushSize: size,
-    }));
-  },
-
+  setBrushSize: (size) => set({ brushSize: size }),
   setActiveTarget: (target) => set({ activeTarget: target }),
 
-  setTargetColor: async (color, overrideTarget) => {
-    const prev = snapshotFromState(get());
+  setTargetColor: (color, overrideTarget) => {
+    const target = overrideTarget ?? get().activeTarget;
+    const { selectedIds, shapes, history } = get();
 
-    const affectedIds = [...get().selectedIds];
-    const { currentBoardId } = get();
-    const target = overrideTarget || get().activeTarget;
+    const updates = selectedIds
+      .map((id) => {
+        const s = shapes.find((sh) => sh.id === id);
+        return {
+          id,
+          oldProps: { [target]: target === "fill" ? s?.fill : s?.stroke },
+          newProps: { [target]: color },
+        };
+      })
+      .filter((u) => u.oldProps[target] !== u.newProps[target]);
+
+    if (updates.length === 0) {
+      set((state) => ({
+        activeFill: target === "fill" ? color : state.activeFill,
+        activeStroke: target === "stroke" ? color : state.activeStroke,
+      }));
+      return;
+    }
+
+    let finalAction: Action;
 
     set((state) => {
-      const draft = produce(state, (d: Draft<CanvasState>) => {
-        if (target === "fill") d.activeFill = color;
-        else d.activeStroke = color;
-        d.selectedIds.forEach((id) => {
-          const shape = d.shapes.find((s) => s.id === id);
-          if (shape) shape[target] = color;
-        });
-      });
-      return {
-        ...draft,
-        history: { past: [...state.history.past, prev], future: [] },
-        canUndo: true,
-        canRedo: false,
-      };
+      const past = state.history.past;
+      const lastAction = past[past.length - 1];
+
+      const isSameBatch =
+        lastAction?.type === "UPDATE_BATCH" &&
+        lastAction.updates.length === updates.length &&
+        lastAction.updates.every(
+          (u, i) =>
+            u.id === updates[i].id && Object.keys(u.newProps)[0] === target,
+        );
+
+      if (isSameBatch) {
+        const coalescedUpdates = updates.map((u, i) => ({
+          ...u,
+          oldProps: lastAction.updates[i].oldProps,
+        }));
+        finalAction = { type: "UPDATE_BATCH", updates: coalescedUpdates };
+
+        return {
+          ...produce(state, (d: Draft<CanvasState>) => {
+            if (target === "fill") d.activeFill = color;
+            else d.activeStroke = color;
+            d.selectedIds.forEach((id) => {
+              const shape = d.shapes.find((s) => s.id === id);
+              if (shape) {
+                if (target === "fill") shape.fill = color;
+                else shape.stroke = color;
+              }
+            });
+          }),
+          history: { past: [...past.slice(0, -1), finalAction], future: [] },
+          canUndo: true,
+          canRedo: false,
+        };
+      } else {
+        finalAction = { type: "UPDATE_BATCH", updates };
+
+        return {
+          ...produce(state, (d: Draft<CanvasState>) => {
+            if (target === "fill") d.activeFill = color;
+            else d.activeStroke = color;
+            d.selectedIds.forEach((id) => {
+              const shape = d.shapes.find((s) => s.id === id);
+              if (shape) {
+                if (target === "fill") shape.fill = color;
+                else shape.stroke = color;
+              }
+            });
+          }),
+          history: { past: [...past, finalAction], future: [] },
+          canUndo: true,
+          canRedo: false,
+        };
+      }
     });
 
-    if (currentBoardId && affectedIds.length > 0) {
-      await Promise.all(
-        affectedIds.map((id) =>
-          apiUpdateShape(currentBoardId, id, { [target]: color }).catch(() =>
-            console.error(`Failed to update ${target} for shape ${id}`),
-          ),
-        ),
-      );
-    }
+    get().broadcast?.(finalAction!);
   },
 
   toggleColorPicker: () =>
     set((state) => ({ isColorPickerOpen: !state.isColorPickerOpen })),
 
-  addShape: async (shape) => {
-    const prev = snapshotFromState(get());
-    const tempId = Math.random().toString(36).slice(2, 11);
+  addShapeLocally: (shape) => {
+    const action: Action = { type: "ADD", shape };
+    set((state) => ({
+      shapes: [...state.shapes, shape],
+      history: { past: [...state.history.past, action], future: [] },
+      canUndo: true,
+      canRedo: false,
+    }));
+  },
 
+  updateShapeLocally: (id, props, addToHistory = true) => {
     set((state) => {
-      const draft = produce(state, (d: Draft<CanvasState>) => {
-        d.shapes.push({ ...shape, id: tempId });
-      });
+      const original = state.shapes.find((s) => s.id === id);
+      if (!original) return state;
+
+      const newShapes = state.shapes.map((s) =>
+        s.id === id ? { ...s, ...props } : s,
+      );
+
+      if (!addToHistory) return { shapes: newShapes };
+
+      const oldProps = Object.keys(props).reduce(
+        (acc, key) => ({
+          ...acc,
+          [key]: (original as any)[key],
+        }),
+        {},
+      );
+
+      const action: Action = { type: "UPDATE", id, oldProps, newProps: props };
+
       return {
-        ...draft,
-        history: { past: [...state.history.past, prev], future: [] },
+        shapes: newShapes,
+        history: { past: [...state.history.past, action], future: [] },
         canUndo: true,
         canRedo: false,
       };
     });
-
-    const { currentBoardId } = get();
-    if (currentBoardId) {
-      try {
-        const saved = await apiCreateShape(currentBoardId, shape);
-        set((state) => ({
-          shapes: state.shapes.map((s) =>
-            s.id === tempId ? { ...s, id: saved.id } : s,
-          ),
-        }));
-      } catch {
-        console.error("Failed to save shape — rolling back");
-        set((state) => ({
-          shapes: state.shapes.filter((s) => s.id !== tempId),
-        }));
-      }
-    }
   },
 
-  updateShape: async (id, newProps) => {
-    const prev = snapshotFromState(get());
+  deleteShapesLocally: (ids) => {
+    const { shapes } = get();
+    const deletedShapes = shapes.filter((s) => ids.includes(s.id));
+    const action: Action = { type: "DELETE", shapes: deletedShapes };
 
-    set((state) => {
-      const draft = produce(state, (d: Draft<CanvasState>) => {
-        const shape = d.shapes.find((s) => s.id === id);
-        if (shape) Object.assign(shape, newProps);
-      });
-      return {
-        ...draft,
-        history: { past: [...state.history.past, prev], future: [] },
-        canUndo: true,
-        canRedo: false,
-      };
-    });
-
-    const { currentBoardId } = get();
-    if (currentBoardId) {
-      try {
-        await apiUpdateShape(currentBoardId, id, newProps);
-      } catch {
-        console.error("Failed to update shape");
-      }
-    }
+    set((state) => ({
+      shapes: state.shapes.filter((s) => !ids.includes(s.id)),
+      selectedIds: state.selectedIds.filter((id) => !ids.includes(id)),
+      history: { past: [...state.history.past, action], future: [] },
+      canUndo: true,
+      canRedo: false,
+    }));
   },
 
-  deleteShapes: async (ids) => {
-    const prev = snapshotFromState(get());
-
-    set((state) => {
-      const draft = produce(state, (d: Draft<CanvasState>) => {
-        d.shapes = d.shapes.filter((s) => !ids.includes(s.id));
-        d.selectedIds = d.selectedIds.filter((sid) => !ids.includes(sid));
-      });
-      return {
-        ...draft,
-        history: { past: [...state.history.past, prev], future: [] },
-        canUndo: true,
-        canRedo: false,
-      };
-    });
-
-    const { currentBoardId } = get();
-    if (currentBoardId) {
-      try {
-        await apiDeleteShapes(currentBoardId, ids);
-      } catch {
-        console.error("Failed to delete shapes");
-      }
-    }
-  },
-
-  selectShapes: (ids) => set((state) => ({ ...state, selectedIds: ids })),
+  selectShapes: (ids) => set({ selectedIds: ids }),
 
   undo: () => {
+    const { history } = get();
+    if (history.past.length === 0) return null;
+
+    const action = history.past[history.past.length - 1];
+    const newPast = history.past.slice(0, -1);
+
     set((state) => {
-      if (state.history.past.length === 0) return state;
-      const previous = state.history.past[state.history.past.length - 1];
-      const current = snapshotFromState(state);
+      let newShapes = [...state.shapes];
+
+      switch (action.type) {
+        case "ADD":
+          newShapes = newShapes.filter((s) => s.id !== action.shape.id);
+          break;
+        case "DELETE":
+          newShapes = [...newShapes, ...action.shapes];
+          break;
+        case "UPDATE":
+          newShapes = newShapes.map((s) =>
+            s.id === action.id ? { ...s, ...action.oldProps } : s,
+          );
+          break;
+        case "UPDATE_BATCH":
+          action.updates.forEach((u) => {
+            newShapes = newShapes.map((s) =>
+              s.id === u.id ? { ...s, ...u.oldProps } : s,
+            );
+          });
+          break;
+      }
+
       return {
-        ...state,
-        shapes: previous.shapes,
-        currentTool: previous.currentTool,
-        isDrawing: previous.isDrawing,
-        selectedIds: previous.selectedIds,
-        activeFill: previous.activeFill,
-        activeStroke: previous.activeStroke,
-        activeTarget: previous.activeTarget,
-        brushSize: previous.brushSize,
-        isColorPickerOpen: previous.isColorPickerOpen,
-        history: {
-          past: state.history.past.slice(0, -1),
-          future: [current, ...state.history.future],
-        },
-        canUndo: state.history.past.length - 1 > 0,
+        shapes: newShapes,
+        history: { past: newPast, future: [action, ...state.history.future] },
+        canUndo: newPast.length > 0,
         canRedo: true,
       };
     });
+    return action;
   },
 
   redo: () => {
+    const { history } = get();
+    if (history.future.length === 0) return null;
+
+    const action = history.future[0];
+    const newFuture = history.future.slice(1);
+
     set((state) => {
-      if (state.history.future.length === 0) return state;
-      const next = state.history.future[0];
-      const current = snapshotFromState(state);
+      let newShapes = [...state.shapes];
+
+      switch (action.type) {
+        case "ADD":
+          newShapes = [...newShapes, action.shape];
+          break;
+        case "DELETE":
+          const idsToRemove = action.shapes.map((s) => s.id);
+          newShapes = newShapes.filter((s) => !idsToRemove.includes(s.id));
+          break;
+        case "UPDATE":
+          newShapes = newShapes.map((s) =>
+            s.id === action.id ? { ...s, ...action.newProps } : s,
+          );
+          break;
+        case "UPDATE_BATCH":
+          action.updates.forEach((u) => {
+            newShapes = newShapes.map((s) =>
+              s.id === u.id ? { ...s, ...u.newProps } : s,
+            );
+          });
+          break;
+      }
+
       return {
-        ...state,
-        shapes: next.shapes,
-        currentTool: next.currentTool,
-        isDrawing: next.isDrawing,
-        selectedIds: next.selectedIds,
-        activeFill: next.activeFill,
-        activeStroke: next.activeStroke,
-        activeTarget: next.activeTarget,
-        brushSize: next.brushSize,
-        isColorPickerOpen: next.isColorPickerOpen,
-        history: {
-          past: [...state.history.past, current],
-          future: state.history.future.slice(1),
-        },
+        shapes: newShapes,
+        history: { past: [...state.history.past, action], future: newFuture },
         canUndo: true,
-        canRedo: state.history.future.length - 1 > 0,
+        canRedo: newFuture.length > 0,
       };
     });
+    return action;
   },
+
+  addShapeFromRemote: (shape) =>
+    set((s) =>
+      s.shapes.some((x) => x.id === shape.id)
+        ? s
+        : { shapes: [...s.shapes, shape] },
+    ),
+  updateShapeFromRemote: (id, props) =>
+    set((s) => ({
+      shapes: s.shapes.map((x) => (x.id === id ? { ...x, ...props } : x)),
+    })),
+  deleteShapesFromRemote: (ids) =>
+    set((s) => ({
+      shapes: s.shapes.filter((x) => !ids.includes(x.id)),
+      selectedIds: s.selectedIds.filter((x) => !ids.includes(x)),
+    })),
+  replaceShapesFromRemote: (shapes) => set({ shapes }),
 }));

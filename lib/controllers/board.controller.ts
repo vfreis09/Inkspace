@@ -1,6 +1,6 @@
 import {
-  getBoardsByUserId,
   getBoardById,
+  getBoardsByUserId,
   getMemberRole,
   createBoard,
   updateBoard,
@@ -11,14 +11,7 @@ export async function listBoardsForUser(userId: string) {
   return getBoardsByUserId(userId);
 }
 
-export type GetBoardResult =
-  | { ok: true; board: Awaited<ReturnType<typeof getBoardById>> }
-  | { ok: false; error: "not_found" | "forbidden" };
-
-export async function getBoardForUser(
-  boardId: string,
-  userId: string,
-): Promise<GetBoardResult> {
+export async function getBoardForUser(boardId: string, userId: string) {
   const board = await getBoardById(boardId);
   if (!board) return { ok: false, error: "not_found" };
 
@@ -28,38 +21,17 @@ export async function getBoardForUser(
   return { ok: true, board };
 }
 
-export type CreateBoardInput = {
-  name: string;
-};
-
-export type CreateBoardResult =
-  | { ok: true; board: Awaited<ReturnType<typeof createBoard>> }
-  | { ok: false; error: "invalid_name" };
-
-export async function createBoardForUser(
-  userId: string,
-  input: CreateBoardInput,
-): Promise<CreateBoardResult> {
-  if (!input.name || input.name.trim().length === 0) {
-    return { ok: false, error: "invalid_name" };
-  }
-
-  const board = await createBoard(userId, input.name);
+export async function createBoardForUser(userId: string, name: string) {
+  if (!name.trim()) return { ok: false, error: "invalid_name" };
+  const board = await createBoard(userId, name);
   return { ok: true, board };
 }
-
-export type UpdateBoardResult =
-  | { ok: true; board: Awaited<ReturnType<typeof updateBoard>> }
-  | { ok: false; error: "not_found" | "forbidden" };
 
 export async function updateBoardForUser(
   boardId: string,
   userId: string,
-  data: { name?: string; thumbnail?: string },
-): Promise<UpdateBoardResult> {
-  const board = await getBoardById(boardId);
-  if (!board) return { ok: false, error: "not_found" };
-
+  data: { name?: string },
+) {
   const role = await getMemberRole(boardId, userId);
   if (!role || role === "viewer") return { ok: false, error: "forbidden" };
 
@@ -67,19 +39,9 @@ export async function updateBoardForUser(
   return { ok: true, board: updated };
 }
 
-export type DeleteBoardResult =
-  | { ok: true }
-  | { ok: false; error: "not_found" | "forbidden" };
-
-export async function deleteBoardForUser(
-  boardId: string,
-  userId: string,
-): Promise<DeleteBoardResult> {
-  const board = await getBoardById(boardId);
-  if (!board) return { ok: false, error: "not_found" };
-
+export async function deleteBoardForUser(boardId: string, userId: string) {
   const role = await getMemberRole(boardId, userId);
-  if (!role || role !== "owner") return { ok: false, error: "forbidden" };
+  if (role !== "owner") return { ok: false, error: "forbidden" };
 
   await deleteBoard(boardId);
   return { ok: true };

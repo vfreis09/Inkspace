@@ -1,11 +1,12 @@
 "use client";
 
+import React, { useEffect, useState, use } from "react";
 import dynamic from "next/dynamic";
-import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Toolbar from "@/features/boards/components/Toolbar/Toolbar";
 import ColorPicker from "@/features/boards/components/ColorPicker/ColorPicker";
 import { useStore } from "@/features/boards/store/useStore";
+import { RemoteCursor, usePartyKit } from "@/features/boards/hooks/usePartyKit";
 
 const Canvas = dynamic(
   () => import("@/features/boards/components/Canvas/Canvas"),
@@ -19,20 +20,30 @@ const Canvas = dynamic(
   },
 );
 
-export default function BoardPage() {
-  const params = useParams();
+export default function BoardPage({
+  params,
+}: {
+  params: Promise<{ boardId: string }>;
+}) {
+  const resolvedParams = use(params);
   const router = useRouter();
-  const boardId = params.boardId as string;
+  const boardId = resolvedParams.boardId;
 
-  const loadBoard = useStore((state) => state.loadBoard);
-  const isBoardLoading = useStore((state) => state.isBoardLoading);
-  const boardError = useStore((state) => state.boardError);
-  const isColorPickerOpen = useStore((state) => state.isColorPickerOpen);
-  const toggleColorPicker = useStore((state) => state.toggleColorPicker);
+  const {
+    loadBoard,
+    isBoardLoading,
+    boardError,
+    isColorPickerOpen,
+    toggleColorPicker,
+  } = useStore();
+  const [remoteCursors, setRemoteCursors] = useState<RemoteCursor[]>([]);
+
+  const { sendCursor, sendShapeAdd, sendShapeUpdate, sendShapeDelete } =
+    usePartyKit(boardId, setRemoteCursors);
 
   useEffect(() => {
     if (boardId) loadBoard(boardId);
-  }, [boardId]);
+  }, [boardId, loadBoard]);
 
   if (boardError) {
     return (
@@ -48,13 +59,12 @@ export default function BoardPage() {
     );
   }
 
-  if (isBoardLoading) {
+  if (isBoardLoading)
     return (
       <div className="flex h-screen w-full items-center justify-center bg-zinc-900 text-white">
         <p className="text-sm opacity-60">Loading board...</p>
       </div>
     );
-  }
 
   return (
     <main className="h-screen w-full overflow-hidden bg-[#fdfdfb] flex flex-col">
@@ -68,9 +78,7 @@ export default function BoardPage() {
           </button>
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2 text-white backdrop-blur-md">
             <h1 className="text-sm font-bold">Inkspace Engine v0.2</h1>
-            <p className="text-xs opacity-60">
-              Scroll to zoom • Drag to pan • Press keys to switch tools
-            </p>
+            <p className="text-xs opacity-60">Scroll to zoom • Drag to pan</p>
           </div>
         </div>
         <Toolbar />
@@ -79,7 +87,13 @@ export default function BoardPage() {
             <ColorPicker onClose={toggleColorPicker} />
           </div>
         )}
-        <Canvas />
+        <Canvas
+          cursors={remoteCursors}
+          onCursorMove={sendCursor}
+          onShapeAdd={sendShapeAdd}
+          onShapeUpdate={sendShapeUpdate}
+          onShapeDelete={sendShapeDelete}
+        />
       </div>
     </main>
   );
