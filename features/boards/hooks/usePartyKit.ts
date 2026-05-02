@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useMemo } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import PartySocket from "partysocket";
+import { useUser } from "@clerk/nextjs";
 import { useStore, Shape } from "@/features/boards/store/useStore";
 
 function userColor(userId: string): string {
@@ -26,6 +27,7 @@ export type RemoteCursor = {
   connectionId: string;
   userId: string;
   name: string;
+  avatarUrl?: string;
   color: string;
   x: number;
   y: number;
@@ -35,27 +37,22 @@ export function usePartyKit(
   boardId: string,
   onCursorUpdate: (cursors: RemoteCursor[]) => void,
 ) {
-  const mockUser = useMemo(() => {
-    const id = `guest-${crypto.randomUUID().slice(0, 6)}`;
-    return {
-      id,
-      name: `Guest`,
-      color: userColor(id),
-    };
-  }, []);
-
+  const { user } = useUser();
   const socketRef = useRef<PartySocket | null>(null);
   const cursorsRef = useRef<Map<string, RemoteCursor>>(new Map());
+  const [activeUsers, setActiveUsers] = useState<RemoteCursor[]>([]);
 
   const { addShapeFromRemote, updateShapeFromRemote, deleteShapesFromRemote } =
     useStore();
 
-  const emitCursors = useCallback(() => {
-    onCursorUpdate(Array.from(cursorsRef.current.values()));
+  const emitPresence = useCallback(() => {
+    const cursorsArray = Array.from(cursorsRef.current.values());
+    onCursorUpdate(cursorsArray);
+    setActiveUsers(cursorsArray);
   }, [onCursorUpdate]);
 
   useEffect(() => {
-    if (!boardId) return;
+    if (!boardId || !user) return;
 
     const socket = new PartySocket({
       host: process.env.NEXT_PUBLIC_PARTYKIT_HOST ?? "localhost:1999",
@@ -68,9 +65,10 @@ export function usePartyKit(
       socket.send(
         JSON.stringify({
           type: "user:join",
-          userId: mockUser.id,
-          name: mockUser.name,
-          color: mockUser.color,
+          userId: user.id,
+          name: user.fullName || user.username || "Anonymous",
+          avatarUrl: user.imageUrl,
+          color: userColor(user.id),
         }),
       );
     });
@@ -86,7 +84,7 @@ export function usePartyKit(
               ...c,
             });
           });
-          emitCursors();
+          emitPresence();
           break;
 
         case "user:join":
@@ -94,16 +92,17 @@ export function usePartyKit(
             connectionId: msg.connectionId,
             userId: msg.userId,
             name: msg.name,
+            avatarUrl: msg.avatarUrl,
             color: msg.color,
             x: 0,
             y: 0,
           });
-          emitCursors();
+          emitPresence();
           break;
 
         case "cursor:leave":
           cursorsRef.current.delete(msg.connectionId);
-          emitCursors();
+          emitPresence();
           break;
 
         case "cursor:move":
@@ -112,7 +111,7 @@ export function usePartyKit(
             existing.x = msg.x;
             existing.y = msg.y;
           }
-          emitCursors();
+          emitPresence();
           break;
 
         case "shape:add":
@@ -134,7 +133,14 @@ export function usePartyKit(
     });
 
     return () => socket.close();
-  }, [boardId, mockUser]);
+  }, [
+    boardId,
+    user,
+    addShapeFromRemote,
+    updateShapeFromRemote,
+    deleteShapesFromRemote,
+    emitPresence,
+  ]);
 
   const sendCursor = useCallback((x: number, y: number) => {
     socketRef.current?.send(JSON.stringify({ type: "cursor:move", x, y }));
@@ -159,6 +165,7 @@ export function usePartyKit(
   }, []);
 
   return {
+    activeUsers,
     sendCursor,
     sendShapeAdd,
     sendShapeUpdate,

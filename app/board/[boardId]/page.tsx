@@ -38,8 +38,13 @@ export default function BoardPage({
   } = useStore();
   const [remoteCursors, setRemoteCursors] = useState<RemoteCursor[]>([]);
 
-  const { sendCursor, sendShapeAdd, sendShapeUpdate, sendShapeDelete } =
-    usePartyKit(boardId, setRemoteCursors);
+  const {
+    activeUsers,
+    sendCursor,
+    sendShapeAdd,
+    sendShapeUpdate,
+    sendShapeDelete,
+  } = usePartyKit(boardId, setRemoteCursors);
 
   useEffect(() => {
     if (boardId) loadBoard(boardId);
@@ -91,6 +96,28 @@ export default function BoardPage({
   return (
     <main className="h-screen w-full overflow-hidden bg-[#fdfdfb] flex flex-col">
       <div className="relative flex-1">
+        <div className="absolute right-4 top-4 z-20 flex -space-x-2 overflow-hidden">
+          {activeUsers.map((u) => (
+            <div
+              key={u.connectionId}
+              title={u.name}
+              style={{ borderColor: u.color }}
+              className="relative inline-block h-8 w-8 rounded-full border-2 bg-zinc-800 shadow-sm transition-transform hover:-translate-y-1"
+            >
+              {u.avatarUrl ? (
+                <img
+                  src={u.avatarUrl}
+                  alt={u.name}
+                  className="h-full w-full rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-white uppercase">
+                  {u.name.charAt(0)}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
         <div className="absolute left-4 top-4 z-10 flex items-center gap-3">
           <button
             onClick={() => router.push("/")}

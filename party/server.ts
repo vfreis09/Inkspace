@@ -3,6 +3,7 @@ import type * as Party from "partykit/server";
 type CursorState = {
   userId: string;
   name: string;
+  avatarUrl?: string;
   color: string;
   x: number;
   y: number;
@@ -13,7 +14,13 @@ type ClientMessage =
   | { type: "shape:update"; shapeId: string; props: object }
   | { type: "shape:delete"; ids: string[] }
   | { type: "cursor:move"; x: number; y: number }
-  | { type: "user:join"; userId: string; name: string; color: string }
+  | {
+      type: "user:join";
+      userId: string;
+      name: string;
+      avatarUrl?: string;
+      color: string;
+    }
   | { type: "shapes:sync"; shapes: any[] };
 
 export default class InkspaceParty implements Party.Server {
@@ -42,10 +49,12 @@ export default class InkspaceParty implements Party.Server {
     switch (msg.type) {
       case "user:join":
         this.cursors.set(sender.id, { ...msg, x: 0, y: 0 });
+        const { type, ...userInfo } = msg;
         this.room.broadcast(
           JSON.stringify({
+            type: "user:join",
             connectionId: sender.id,
-            ...msg,
+            ...userInfo,
           }),
           [sender.id],
         );
@@ -156,9 +165,6 @@ export default class InkspaceParty implements Party.Server {
       if (!response.ok) {
         throw new Error(`DB Save Failed: ${response.statusText}`);
       }
-      console.log(
-        `Successfully synced ${upserts.length} updates and ${deletes.length} deletes.`,
-      );
     } catch (err) {
       console.error("Flush Error:", err);
       upserts.forEach((s) => this.pendingUpserts.set(s.id, s));
