@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, use } from "react";
 import dynamic from "next/dynamic";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Toolbar from "@/features/boards/components/Toolbar/Toolbar";
 import ColorPicker from "@/features/boards/components/ColorPicker/ColorPicker";
 import { useStore } from "@/features/boards/store/useStore";
@@ -45,6 +45,28 @@ export default function BoardPage({
     if (boardId) loadBoard(boardId);
   }, [boardId, loadBoard]);
 
+  const handleInvite = async () => {
+    const email = prompt("Enter the email address of the user to invite:");
+    if (!email) return;
+
+    try {
+      const res = await fetch(`/api/boards/${boardId}/invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      if (res.ok) {
+        alert("User invited successfully!");
+      } else {
+        const errorText = await res.text();
+        alert(`Failed to invite: ${errorText}`);
+      }
+    } catch (err) {
+      alert("An error occurred while inviting the user.");
+    }
+  };
+
   if (boardError) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-zinc-900 text-white">
@@ -76,9 +98,17 @@ export default function BoardPage({
           >
             ← Boards
           </button>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2 text-white backdrop-blur-md">
-            <h1 className="text-sm font-bold">Inkspace Engine v0.2</h1>
-            <p className="text-xs opacity-60">Scroll to zoom • Drag to pan</p>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2 text-white backdrop-blur-md flex items-center gap-4">
+            <div>
+              <h1 className="text-sm font-bold">Inkspace Engine v0.2</h1>
+              <p className="text-xs opacity-60">Scroll to zoom • Drag to pan</p>
+            </div>
+            <button
+              onClick={handleInvite}
+              className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition-colors"
+            >
+              Invite
+            </button>
           </div>
         </div>
         <Toolbar />
