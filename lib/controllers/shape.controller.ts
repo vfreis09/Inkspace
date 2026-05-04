@@ -13,7 +13,11 @@ import { getMemberRole, getBoardById } from "@/lib/services/board.service";
 
 export async function listShapesForBoard(boardId: string, userId: string) {
   const role = await getMemberRole(boardId, userId);
-  if (!role) return { ok: false, error: "forbidden" };
+
+  if (!role) {
+    const board = await getBoardById(boardId);
+    if (!board?.isPublic) return { ok: false, error: "forbidden" };
+  }
 
   const shapes = await getShapesByBoardId(boardId);
   return { ok: true, shapes };

@@ -10,26 +10,32 @@ export default async function BoardLayout({
   params: Promise<{ boardId: string }>;
 }) {
   const { userId } = await auth();
-
-  if (!userId) {
-    redirect("/sign-in");
-  }
-
   const { boardId } = await params;
 
   const board = await prisma.board.findUnique({
     where: { id: boardId },
-    include: { members: true },
+    select: {
+      isPublic: true,
+      ownerId: true,
+      members: {
+        where: { userId: userId ?? "undefined" },
+      },
+    },
   });
 
   if (!board) {
     redirect("/");
   }
 
-  const isOwner = board.ownerId === userId;
-  const isMember = board.members.some((member) => member.userId === userId);
+  const isOwner = userId ? board.ownerId === userId : false;
+  const isMember = board.members.length > 0;
 
-  if (!isOwner && !isMember) {
+  const canAccess = board.isPublic || isOwner || isMember;
+
+  if (!canAccess) {
+    if (!userId) {
+      redirect("/sign-in");
+    }
     redirect("/");
   }
 

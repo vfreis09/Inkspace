@@ -22,7 +22,14 @@ export async function getBoardsByUserId(userId: string) {
 export async function getBoardById(boardId: string) {
   return prisma.board.findUnique({
     where: { id: boardId },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      isPublic: true,
+      thumbnail: true,
+      createdAt: true,
+      updatedAt: true,
+      ownerId: true,
       owner: { select: { id: true, name: true, avatarUrl: true } },
       members: {
         include: {
@@ -61,17 +68,18 @@ export async function createBoard(userId: string, name: string) {
 
 export async function updateBoard(
   boardId: string,
-  data: { name?: string; thumbnail?: string },
+  data: { name?: string; thumbnail?: string; isPublic?: boolean },
 ) {
   return prisma.board.update({
     where: { id: boardId },
     data: {
       ...(data.name && { name: data.name.trim() }),
       ...(data.thumbnail && { thumbnail: data.thumbnail }),
+      // ✅ isPublic is a boolean so we can't use && (false would be skipped)
+      ...(data.isPublic !== undefined && { isPublic: data.isPublic }),
     },
   });
 }
-
 export async function deleteBoard(boardId: string) {
   return prisma.board.delete({ where: { id: boardId } });
 }

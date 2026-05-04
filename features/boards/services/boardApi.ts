@@ -35,11 +35,14 @@ export async function apiCreateBoard(name: string) {
   return res.json();
 }
 
-export async function apiUpdateBoard(boardId: string, name: string) {
+export async function apiUpdateBoard(
+  boardId: string,
+  data: { name?: string; isPublic?: boolean },
+) {
   const res = await fetch(`${BASE}/boards/${boardId}`, {
     ...baseOptions(),
     method: "PUT",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error("Failed to update board");
   return res.json();

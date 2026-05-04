@@ -16,7 +16,7 @@ export async function getBoardForUser(boardId: string, userId: string) {
   if (!board) return { ok: false, error: "not_found" };
 
   const role = await getMemberRole(boardId, userId);
-  if (!role) return { ok: false, error: "forbidden" };
+  if (!board.isPublic && !role) return { ok: false, error: "forbidden" };
 
   return { ok: true, board };
 }
@@ -30,9 +30,10 @@ export async function createBoardForUser(userId: string, name: string) {
 export async function updateBoardForUser(
   boardId: string,
   userId: string,
-  data: { name?: string },
+  data: { name?: string; isPublic?: boolean },
 ) {
   const role = await getMemberRole(boardId, userId);
+
   if (!role || role === "viewer") return { ok: false, error: "forbidden" };
 
   const updated = await updateBoard(boardId, data);
