@@ -81,6 +81,27 @@ export default function BoardPage({
     }
   };
 
+  const handleShare = async () => {
+    try {
+      const res = await fetch(`/api/boards/${boardId}/inviteToken`);
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("invite-token error:", res.status, text);
+        alert(`Failed to get share link: ${res.status} ${text}`);
+        return;
+      }
+
+      const { inviteToken } = await res.json();
+      const link = `${window.location.origin}/board/${boardId}/join?invite=${inviteToken}`;
+      await navigator.clipboard.writeText(link);
+      alert("Invite link copied!");
+    } catch (err) {
+      console.error("handleShare error:", err);
+      alert("Failed to copy share link.");
+    }
+  };
+
   if (boardError) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center gap-6 bg-[#0a0a0a] text-white">
@@ -140,6 +161,13 @@ export default function BoardPage({
             >
               <Send size={12} />
               INVITE
+            </button>
+            <button
+              onClick={handleShare}
+              className="flex items-center gap-2 rounded-lg bg-zinc-700 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-zinc-600 active:scale-95"
+            >
+              <Globe size={12} />
+              SHARE
             </button>
           </div>
         </div>

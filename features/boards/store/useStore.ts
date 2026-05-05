@@ -106,7 +106,9 @@ export const useStore = create<CanvasState>((set, get) => ({
   loadBoard: async (boardId: string) => {
     set({ isBoardLoading: true, boardError: null });
     try {
-      const shapes = await apiFetchShapes(boardId);
+      const grants = JSON.parse(localStorage.getItem("board_grants") || "{}");
+      const token = grants[boardId];
+      const shapes = await apiFetchShapes(boardId, token);
       set({
         shapes,
         currentBoardId: boardId,
@@ -115,8 +117,16 @@ export const useStore = create<CanvasState>((set, get) => ({
         canRedo: false,
         isBoardLoading: false,
       });
-    } catch {
-      set({ boardError: "Failed to load board", isBoardLoading: false });
+    } catch (err: any) {
+      const message =
+        err?.message === "FORBIDDEN"
+          ? "This board is private. Use an invite link."
+          : err?.message === "NOT_FOUND"
+            ? "Board not found."
+            : err?.message === "Failed to fetch shapes"
+              ? "Failed to load board."
+              : err?.message || "Failed to load board";
+      set({ boardError: message, isBoardLoading: false });
     }
   },
 

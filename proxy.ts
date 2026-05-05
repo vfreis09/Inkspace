@@ -1,10 +1,10 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-//have to change this code in the feature for guest/auth users
 const isPublicRoute = createRouteMatcher([
   "/",
   "/board/(.*)",
-  "/api/boards/(.*)",
+  "/api/boards/(.*)/shapes",
+  "/api/boards/(.*)/inviteToken",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

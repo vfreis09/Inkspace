@@ -4,7 +4,64 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-   url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String        @id
+  email       String        @unique
+  name        String?
+  avatarUrl   String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  ownedBoards Board[]
+  memberships BoardMember[]
+}
+
+model Board {
+  id          String        @id @default(cuid())
+  name        String
+  thumbnail   String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  ownerId     String
+  inviteToken String?       @unique @default(cuid())
+  isPublic    Boolean       @default(false)
+  owner       User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  members     BoardMember[]
+  shapes      Shape[]
+}
+
+model BoardMember {
+  id        String    @id @default(cuid())
+  role      BoardRole @default(viewer)
+  createdAt DateTime  @default(now())
+  boardId   String
+  userId    String
+  board     Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([boardId, userId])
+}
+
+model Shape {
+  id           String    @id @default(cuid())
+  type         ShapeType
+  x            Float
+  y            Float
+  width        Float
+  height       Float
+  rotation     Float     @default(0)
+  fill         String
+  stroke       String
+  strokeWidth  Float
+  points       Float[]
+  order        Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  boardId      String
+  lastEditedBy String?
+  board        Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
 }
 
 enum ShapeType {
@@ -18,67 +75,4 @@ enum BoardRole {
   owner
   editor
   viewer
-}
-
-model User {
-  id        String   @id 
-  email     String   @unique
-  name      String?
-  avatarUrl String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  ownedBoards Board[]
-  memberships BoardMember[]
-}
-
-model Board {
-  id        String   @id @default(cuid())
-  name      String
-  thumbnail String?  
-  isPublic  Boolean  @default(false) 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  ownerId String
-  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-
-  shapes  Shape[]
-  members BoardMember[]
-}
-
-model BoardMember {
-  id        String    @id @default(cuid())
-  role      BoardRole @default(viewer)
-  createdAt DateTime  @default(now())
-
-  boardId String
-  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([boardId, userId])
-}
-
-model Shape {
-  id          String    @id @default(cuid())
-  type        ShapeType
-  x           Float
-  y           Float
-  width       Float
-  height      Float
-  rotation    Float     @default(0)
-  fill        String
-  stroke      String
-  strokeWidth Float
-  points      Float[]
-  order       Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  boardId String
-  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
-
-  lastEditedBy String?
 }

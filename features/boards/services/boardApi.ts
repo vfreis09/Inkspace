@@ -9,6 +9,12 @@ function baseOptions(): RequestInit {
   };
 }
 
+function withInviteParam(url: string, inviteToken?: string) {
+  if (!inviteToken) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}invite=${encodeURIComponent(inviteToken)}`;
+}
+
 export async function apiFetchBoards() {
   const res = await fetch(`/api/boards`, {
     credentials: "include",
@@ -57,20 +63,34 @@ export async function apiDeleteBoard(boardId: string) {
   return res.json();
 }
 
-export async function apiFetchShapes(boardId: string) {
-  const res = await fetch(`${BASE}/boards/${boardId}/shapes`, {
-    ...baseOptions(),
-  });
-  if (!res.ok) throw new Error("Failed to fetch shapes");
+export async function apiFetchShapes(boardId: string, inviteToken?: string) {
+  const res = await fetch(
+    withInviteParam(`${BASE}/boards/${boardId}/shapes`, inviteToken),
+    {
+      ...baseOptions(),
+    },
+  );
+  if (!res.ok) {
+    if (res.status === 403) throw new Error("FORBIDDEN");
+    if (res.status === 404) throw new Error("NOT_FOUND");
+    throw new Error("Failed to fetch shapes");
+  }
   return res.json();
 }
 
-export async function apiCreateShape(boardId: string, shape: object) {
-  const res = await fetch(`${BASE}/boards/${boardId}/shapes`, {
-    ...baseOptions(),
-    method: "POST",
-    body: JSON.stringify(shape),
-  });
+export async function apiCreateShape(
+  boardId: string,
+  shape: object,
+  inviteToken?: string,
+) {
+  const res = await fetch(
+    withInviteParam(`${BASE}/boards/${boardId}/shapes`, inviteToken),
+    {
+      ...baseOptions(),
+      method: "POST",
+      body: JSON.stringify(shape),
+    },
+  );
   if (!res.ok) throw new Error("Failed to create shape");
   return res.json();
 }
@@ -79,22 +99,33 @@ export async function apiUpdateShape(
   boardId: string,
   shapeId: string,
   props: object,
+  inviteToken?: string,
 ) {
-  const res = await fetch(`${BASE}/boards/${boardId}/shapes/${shapeId}`, {
-    ...baseOptions(),
-    method: "PUT",
-    body: JSON.stringify(props),
-  });
+  const res = await fetch(
+    withInviteParam(`${BASE}/boards/${boardId}/shapes/${shapeId}`, inviteToken),
+    {
+      ...baseOptions(),
+      method: "PUT",
+      body: JSON.stringify(props),
+    },
+  );
   if (!res.ok) throw new Error("Failed to update shape");
   return res.json();
 }
 
-export async function apiDeleteShapes(boardId: string, ids: string[]) {
-  const res = await fetch(`${BASE}/boards/${boardId}/shapes/batch`, {
-    ...baseOptions(),
-    method: "PUT",
-    body: JSON.stringify({ shapes: [], deletedIds: ids }),
-  });
+export async function apiDeleteShapes(
+  boardId: string,
+  ids: string[],
+  inviteToken?: string,
+) {
+  const res = await fetch(
+    withInviteParam(`${BASE}/boards/${boardId}/shapes/batch`, inviteToken),
+    {
+      ...baseOptions(),
+      method: "PUT",
+      body: JSON.stringify({ shapes: [], deletedIds: ids }),
+    },
+  );
   if (!res.ok) throw new Error("Failed to delete shapes");
   return res.json();
 }

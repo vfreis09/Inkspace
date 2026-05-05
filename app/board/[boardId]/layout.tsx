@@ -29,13 +29,9 @@ export default async function BoardLayout({
 
   const isOwner = userId ? board.ownerId === userId : false;
   const isMember = board.members.length > 0;
-
   const canAccess = board.isPublic || isOwner || isMember;
 
-  if (!canAccess) {
-    if (!userId) {
-      redirect("/sign-in");
-    }
+  if (!canAccess && userId) {
     redirect("/");
   }
 
