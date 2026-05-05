@@ -11,9 +11,18 @@ import {
 } from "@/lib/services/shape.service";
 import { getMemberRole, getBoardById } from "@/lib/services/board.service";
 
-export async function listShapesForBoard(boardId: string, userId: string) {
-  const role = await getMemberRole(boardId, userId);
+export async function listShapesForBoard(
+  boardId: string,
+  userId: string | null,
+) {
+  if (!userId) {
+    const board = await getBoardById(boardId);
+    if (!board?.isPublic) return { ok: false, error: "forbidden" };
+    const shapes = await getShapesByBoardId(boardId);
+    return { ok: true, shapes };
+  }
 
+  const role = await getMemberRole(boardId, userId);
   if (!role) {
     const board = await getBoardById(boardId);
     if (!board?.isPublic) return { ok: false, error: "forbidden" };

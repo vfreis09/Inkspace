@@ -7,9 +7,11 @@ type CursorState = {
   color: string;
   x: number;
   y: number;
+  isGuest?: boolean;
 };
 
 type ClientMessage =
+  | { type: "user:rename"; name: string }
   | { type: "shape:add"; shape: any }
   | { type: "shape:update"; shapeId: string; props: object }
   | { type: "shape:delete"; ids: string[] }
@@ -20,6 +22,7 @@ type ClientMessage =
       name: string;
       avatarUrl?: string;
       color: string;
+      isGuest?: boolean;
     }
   | { type: "shapes:sync"; shapes: any[] };
 
@@ -48,7 +51,12 @@ export default class InkspaceParty implements Party.Server {
 
     switch (msg.type) {
       case "user:join":
-        this.cursors.set(sender.id, { ...msg, x: 0, y: 0 });
+        this.cursors.set(sender.id, {
+          ...msg,
+          x: 0,
+          y: 0,
+          isGuest: msg.isGuest,
+        });
         const { type, ...userInfo } = msg;
         this.room.broadcast(
           JSON.stringify({
@@ -127,6 +135,20 @@ export default class InkspaceParty implements Party.Server {
         });
 
         this.scheduleSave();
+        break;
+
+      case "user:rename":
+        const cursorToRename = this.cursors.get(sender.id);
+        if (cursorToRename) {
+          cursorToRename.name = msg.name;
+          this.room.broadcast(
+            JSON.stringify({
+              type: "user:rename",
+              connectionId: sender.id,
+              name: msg.name,
+            }),
+          );
+        }
         break;
     }
   }

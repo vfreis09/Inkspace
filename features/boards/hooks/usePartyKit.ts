@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import PartySocket from "partysocket";
 import { useUser } from "@clerk/nextjs";
 import { useStore, Shape } from "@/features/boards/store/useStore";
@@ -33,6 +33,17 @@ export type RemoteCursor = {
   y: number;
 };
 
+export function getGuestIdentity() {
+  const stored = localStorage.getItem("guest_identity");
+  if (stored) return JSON.parse(stored);
+  const identity = {
+    id: `guest_${crypto.randomUUID()}`,
+    name: `Guest #${Math.floor(Math.random() * 9000) + 1000}`,
+  };
+  localStorage.setItem("guest_identity", JSON.stringify(identity));
+  return identity;
+}
+
 export function usePartyKit(
   boardId: string,
   onCursorUpdate: (cursors: RemoteCursor[]) => void,
@@ -45,6 +56,35 @@ export function usePartyKit(
   const { addShapeFromRemote, updateShapeFromRemote, deleteShapesFromRemote } =
     useStore();
 
+  const guestIdentity = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    return user ? null : getGuestIdentity();
+  }, [user]);
+
+  const userId = user?.id ?? guestIdentity?.id ?? null;
+  const userName =
+    user?.fullName ?? user?.username ?? guestIdentity?.name ?? "Anonymous";
+  const avatarUrl = user?.imageUrl;
+  const isGuest = !user;
+
+  const [guestName, setGuestNameState] = useState(guestIdentity?.name ?? "");
+
+  const setGuestName = useCallback(
+    (name: string) => {
+      if (!guestIdentity) return;
+      const updated = { ...guestIdentity, name };
+      localStorage.setItem("guest_identity", JSON.stringify(updated));
+      setGuestNameState(name);
+      socketRef.current?.send(
+        JSON.stringify({
+          type: "user:rename",
+          name,
+        }),
+      );
+    },
+    [guestIdentity],
+  );
+
   const emitPresence = useCallback(() => {
     const cursorsArray = Array.from(cursorsRef.current.values());
     onCursorUpdate(cursorsArray);
@@ -52,7 +92,7 @@ export function usePartyKit(
   }, [onCursorUpdate]);
 
   useEffect(() => {
-    if (!boardId || !user) return;
+    if (!boardId || !userId) return;
 
     const socket = new PartySocket({
       host: process.env.NEXT_PUBLIC_PARTYKIT_HOST ?? "localhost:1999",
@@ -65,10 +105,11 @@ export function usePartyKit(
       socket.send(
         JSON.stringify({
           type: "user:join",
-          userId: user.id,
-          name: user.fullName || user.username || "Anonymous",
-          avatarUrl: user.imageUrl,
-          color: userColor(user.id),
+          userId,
+          name: guestName || userName,
+          avatarUrl,
+          color: userColor(userId),
+          isGuest,
         }),
       );
     });
@@ -129,6 +170,14 @@ export function usePartyKit(
         case "shapes:sync":
           useStore.setState({ shapes: msg.shapes });
           break;
+
+        case "user:rename":
+          const toRename = cursorsRef.current.get(msg.connectionId);
+          if (toRename) {
+            toRename.name = msg.name;
+            emitPresence();
+          }
+          break;
       }
     });
 
@@ -166,6 +215,9 @@ export function usePartyKit(
 
   return {
     activeUsers,
+    isGuest,
+    guestName,
+    setGuestName,
     sendCursor,
     sendShapeAdd,
     sendShapeUpdate,

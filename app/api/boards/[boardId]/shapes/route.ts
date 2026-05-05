@@ -14,27 +14,23 @@ function errorToStatus(error: string) {
 
 export async function GET(req: NextRequest, { params }: Params) {
   const { userId } = await auth();
-  const user = await currentUser();
-
-  if (!userId || !user) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
-  const userEmail = user.emailAddresses[0]?.emailAddress || "";
-  const userName = user.firstName || user.username || "Unknown User";
-  await ensureUser(userId, userEmail, userName);
-
   const { boardId } = await params;
 
-  const result = await listShapesForBoard(boardId, userId);
-
-  if (!result.ok) {
-    const error = result.error;
-    if (!error)
-      return Response.json({ error: "Unknown error" }, { status: 500 });
-    return Response.json({ error }, { status: errorToStatus(error) });
+  if (!userId) {
+    const result = await listShapesForBoard(boardId, null);
+    if (!result.ok)
+      return Response.json({ error: result.error }, { status: 403 });
+    return Response.json(result.shapes);
   }
 
+  const user = await currentUser();
+  const userEmail = user!.emailAddresses[0]?.emailAddress || "";
+  const userName = user!.firstName || user!.username || "Unknown User";
+  await ensureUser(userId, userEmail, userName);
+
+  const result = await listShapesForBoard(boardId, userId);
+  if (!result.ok)
+    return Response.json({ error: result.error }, { status: 403 });
   return Response.json(result.shapes);
 }
 
