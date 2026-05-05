@@ -79,7 +79,6 @@ export default class InkspaceParty implements Party.Server {
               connectionId: sender.id,
               ...cursor,
             }),
-            [sender.id],
           );
         }
         break;

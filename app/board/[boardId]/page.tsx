@@ -221,7 +221,7 @@ export default function BoardPage({
             ))}
           </div>
           <span className="text-[9px] font-bold text-zinc-300 uppercase tracking-widest bg-zinc-900/80 px-2 py-0.5 rounded-md backdrop-blur-sm border border-white/10">
-            {activeUsers.length + 1} online
+            {activeUsers.length} online
           </span>
         </div>
         <Toolbar />

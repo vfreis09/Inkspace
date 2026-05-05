@@ -53,6 +53,9 @@ export function usePartyKit(
   const cursorsRef = useRef<Map<string, RemoteCursor>>(new Map());
   const [activeUsers, setActiveUsers] = useState<RemoteCursor[]>([]);
 
+  const lastCursorPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const cursorFrameRef = useRef<number | null>(null);
+
   const { addShapeFromRemote, updateShapeFromRemote, deleteShapesFromRemote } =
     useStore();
 
@@ -86,10 +89,21 @@ export function usePartyKit(
   );
 
   const emitPresence = useCallback(() => {
-    const cursorsArray = Array.from(cursorsRef.current.values());
-    onCursorUpdate(cursorsArray);
-    setActiveUsers(cursorsArray);
-  }, [onCursorUpdate]);
+    const allCursors = Array.from(cursorsRef.current.values());
+
+    const byUser = new Map<string, RemoteCursor>();
+    for (const c of allCursors) {
+      byUser.set(c.userId, c);
+    }
+    const uniqueUsers = Array.from(byUser.values());
+
+    const othersOnly = uniqueUsers.filter(
+      (c) => (userId && c.userId !== userId) || !userId,
+    );
+
+    onCursorUpdate(othersOnly);
+    setActiveUsers(uniqueUsers);
+  }, [onCursorUpdate, userId]);
 
   useEffect(() => {
     if (!boardId || !userId) return;
@@ -191,9 +205,25 @@ export function usePartyKit(
     emitPresence,
   ]);
 
-  const sendCursor = useCallback((x: number, y: number) => {
-    socketRef.current?.send(JSON.stringify({ type: "cursor:move", x, y }));
+  const flushCursor = useCallback(() => {
+    if (!socketRef.current || !lastCursorPositionRef.current) {
+      cursorFrameRef.current = null;
+      return;
+    }
+    const { x, y } = lastCursorPositionRef.current;
+    socketRef.current.send(JSON.stringify({ type: "cursor:move", x, y }));
+    cursorFrameRef.current = null;
   }, []);
+
+  const sendCursor = useCallback(
+    (x: number, y: number) => {
+      lastCursorPositionRef.current = { x, y };
+      if (cursorFrameRef.current == null) {
+        cursorFrameRef.current = requestAnimationFrame(flushCursor);
+      }
+    },
+    [flushCursor],
+  );
 
   const sendShapeAdd = useCallback((shape: object) => {
     socketRef.current?.send(JSON.stringify({ type: "shape:add", shape }));

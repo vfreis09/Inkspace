@@ -7,7 +7,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
-import { Stage, Layer, Rect, Transformer, Group, Path } from "react-konva";
+import { Stage, Layer, Rect, Transformer, Group, Path, Text } from "react-konva";
 import { useStore } from "@/features/boards/store/useStore";
 import type {
   Shape,
@@ -482,7 +482,26 @@ export default function Canvas({
                 fill={c.color}
                 stroke="white"
                 strokeWidth={1}
+                shadowColor="rgba(0,0,0,0.4)"
+                shadowBlur={4}
+                shadowOffset={{ x: 0, y: 1 }}
               />
+              <Group x={14} y={-4}>
+                <Rect
+                  fill={c.color}
+                  cornerRadius={4}
+                  height={16}
+                  width={Math.max(32, c.name.length * 7)}
+                  opacity={0.9}
+                />
+                <Text
+                  text={c.name}
+                  fill="white"
+                  fontSize={10}
+                  fontStyle="bold"
+                  padding={4}
+                />
+              </Group>
             </Group>
           ))}
         </Layer>
