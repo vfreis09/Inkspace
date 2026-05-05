@@ -156,18 +156,18 @@ export default function BoardPage({
               <p className="text-[10px] text-zinc-500">Multiplayer Canvas</p>
             </div>
             <button
-              onClick={handleInvite}
-              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-indigo-500 active:scale-95"
-            >
-              <Send size={12} />
-              INVITE
-            </button>
-            <button
               onClick={handleShare}
-              className="flex items-center gap-2 rounded-lg bg-zinc-700 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-zinc-600 active:scale-95"
+              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-indigo-500 active:scale-95"
             >
               <Globe size={12} />
               SHARE
+            </button>
+            <button
+              onClick={handleInvite}
+              className="flex items-center gap-2 rounded-lg bg-zinc-700 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-zinc-600 active:scale-95"
+            >
+              <Send size={12} />
+              INVITE WITH EMAIL
             </button>
           </div>
         </div>
