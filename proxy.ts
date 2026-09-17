@@ -3,8 +3,9 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 const isPublicRoute = createRouteMatcher([
   "/",
   "/board/(.*)",
-  "/api/boards/(.*)/shapes",
+  "/api/boards/(.*)/shapes(.*)",   // now matches /shapes AND /shapes/batch
   "/api/boards/(.*)/inviteToken",
+  "/api/boards/(.*)/party-token",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

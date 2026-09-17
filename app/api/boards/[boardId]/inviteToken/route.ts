@@ -12,8 +12,9 @@ export async function GET(req: NextRequest, { params }: Params) {
   const { boardId } = await params;
 
   const role = await getMemberRole(boardId, userId);
-  if (role !== "owner")
+  if (role !== "owner") {
     return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const board = await prisma.board.findUnique({
     where: { id: boardId },

@@ -9,11 +9,13 @@ import {
   Lock,
   Pencil,
   LayoutDashboard,
+  Users,
 } from "lucide-react";
 import {
   apiUpdateBoard,
   apiDeleteBoard,
 } from "@/features/boards/services/boardApi";
+import { InviteDialog } from "@/features/boards/components/InviteDialog/InviteDialog";
 
 interface Board {
   id: string;
@@ -21,22 +23,24 @@ interface Board {
   isPublic: boolean;
   updatedAt: string;
   thumbnail?: string;
+  ownerId?: string; // needed to know if the current user can manage it
 }
 
 interface BoardCardProps {
   board: Board;
   onAction: () => void;
+  currentUserId?: string; // pass this down from BoardDashboard (useUser().user.id)
 }
 
-export default function BoardCard({ board, onAction }: BoardCardProps) {
+export default function BoardCard({ board, onAction, currentUserId }: BoardCardProps) {
   const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isManageOpen, setIsManageOpen] = useState(false);
   const [localBoard, setLocalBoard] = useState<Board>(board);
 
-  const handleUpdate = async (updates: {
-    name?: string;
-    isPublic?: boolean;
-  }) => {
+  const isOwner = currentUserId && board.ownerId === currentUserId;
+
+  const handleUpdate = async (updates: { name?: string; isPublic?: boolean }) => {
     setLocalBoard((prev) => ({ ...prev, ...updates }));
     try {
       await apiUpdateBoard(localBoard.id, updates);
@@ -69,27 +73,17 @@ export default function BoardCard({ board, onAction }: BoardCardProps) {
     >
       <div className="mb-4 h-28 rounded-xl bg-white/5 flex items-center justify-center overflow-hidden transition-colors group-hover:bg-white/10">
         {localBoard.thumbnail ? (
-          <img
-            src={localBoard.thumbnail}
-            alt={localBoard.name}
-            className="h-full w-full object-cover"
-          />
+          <img src={localBoard.thumbnail} alt={localBoard.name} className="h-full w-full object-cover" />
         ) : (
           <LayoutDashboard size={28} className="text-zinc-600" />
         )}
       </div>
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-col gap-1 min-w-0">
-          <h3 className="text-sm font-semibold text-zinc-200 truncate pr-2">
-            {localBoard.name}
-          </h3>
+          <h3 className="text-sm font-semibold text-zinc-200 truncate pr-2">{localBoard.name}</h3>
           <div className="flex items-center gap-2 text-[10px] text-zinc-500">
             <span className="flex items-center gap-1">
-              {localBoard.isPublic ? (
-                <Globe size={10} className="text-indigo-400" />
-              ) : (
-                <Lock size={10} />
-              )}
+              {localBoard.isPublic ? <Globe size={10} className="text-indigo-400" /> : <Lock size={10} />}
               {localBoard.isPublic ? "Public" : "Private"}
             </span>
             <span>•</span>
@@ -105,11 +99,19 @@ export default function BoardCard({ board, onAction }: BoardCardProps) {
           </button>
           {isMenuOpen && (
             <>
-              <div
-                className="fixed inset-0 z-20"
-                onClick={() => setIsMenuOpen(false)}
-              />
-              <div className="absolute right-0 mt-2 z-30 w-40 rounded-xl border border-white/10 bg-zinc-900 p-1.5 shadow-2xl">
+              <div className="fixed inset-0 z-20" onClick={() => setIsMenuOpen(false)} />
+              <div className="absolute right-0 mt-2 z-30 w-44 rounded-xl border border-white/10 bg-zinc-900 p-1.5 shadow-2xl">
+                {isOwner && (
+                  <button
+                    onClick={() => {
+                      setIsManageOpen(true);
+                      setIsMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-zinc-300 hover:bg-white/5 transition-colors"
+                  >
+                    <Users size={14} /> Manage access
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     const newName = prompt("New name?", localBoard.name);
@@ -120,20 +122,18 @@ export default function BoardCard({ board, onAction }: BoardCardProps) {
                 >
                   <Pencil size={14} /> Rename
                 </button>
-                <button
-                  onClick={() => {
-                    handleUpdate({ isPublic: !localBoard.isPublic });
-                    setIsMenuOpen(false);
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-zinc-300 hover:bg-white/5 transition-colors"
-                >
-                  {localBoard.isPublic ? (
-                    <Lock size={14} />
-                  ) : (
-                    <Globe size={14} />
-                  )}
-                  Make {localBoard.isPublic ? "Private" : "Public"}
-                </button>
+                {isOwner && (
+                  <button
+                    onClick={() => {
+                      handleUpdate({ isPublic: !localBoard.isPublic });
+                      setIsMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-zinc-300 hover:bg-white/5 transition-colors"
+                  >
+                    {localBoard.isPublic ? <Lock size={14} /> : <Globe size={14} />}
+                    Make {localBoard.isPublic ? "Private" : "Public"}
+                  </button>
+                )}
                 <div className="my-1 h-[1px] bg-white/5" />
                 <button
                   onClick={handleDelete}
@@ -146,6 +146,23 @@ export default function BoardCard({ board, onAction }: BoardCardProps) {
           )}
         </div>
       </div>
+
+      {isManageOpen && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsManageOpen(false);
+          }}
+        >
+          <div
+            className="w-96 rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <InviteDialog boardId={localBoard.id} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   await ensureUser(userId, email, name);
 
   const body = await req.json();
-  const result = await createBoardForUser(userId, body.name);
+  const result = await createBoardForUser(userId, body.name, Boolean(body.isPublic));
 
   if (!result.ok) {
     return Response.json({ error: "Board name is required" }, { status: 400 });

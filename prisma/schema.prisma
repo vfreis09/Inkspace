@@ -25,8 +25,9 @@ model Board {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   ownerId     String
-  inviteToken String?       @unique @default(cuid())
-  isPublic    Boolean       @default(false)
+  inviteToken String?   @unique @default(cuid())
+  inviteRole  BoardRole @default(viewer)   
+  isPublic    Boolean   @default(false)
   owner       User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   members     BoardMember[]
   shapes      Shape[]

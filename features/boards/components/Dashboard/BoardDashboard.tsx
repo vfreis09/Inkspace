@@ -16,12 +16,13 @@ type Board = {
   name: string;
   isPublic: boolean;
   updatedAt: string;
+  ownerId: string;
   _count: { shapes: number };
 };
 
 export default function BoardDashboard() {
   const router = useRouter();
-  const { isLoaded, isSignedIn } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const { openSignIn } = useClerk();
 
   const [boards, setBoards] = useState<Board[]>([]);
@@ -29,6 +30,7 @@ export default function BoardDashboard() {
   const [isCreating, setIsCreating] = useState(false);
   const [newBoardName, setNewBoardName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [newBoardIsPublic, setNewBoardIsPublic] = useState(false);
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
@@ -55,7 +57,7 @@ export default function BoardDashboard() {
     if (!name) return;
     setIsCreating(true);
     try {
-      const board = await apiCreateBoard(name);
+      const board = await apiCreateBoard(name, newBoardIsPublic);
       router.push(`/board/${board.id}`);
     } catch {
       setError("Failed to create board.");
@@ -79,6 +81,14 @@ export default function BoardDashboard() {
             placeholder="New board name..."
             className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-all"
           />
+          <select
+            value={newBoardIsPublic ? "public" : "private"}
+            onChange={(e) => setNewBoardIsPublic(e.target.value === "public")}
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-white outline-none"
+          >
+            <option value="private">Private</option>
+            <option value="public">Public</option>
+          </select>
           <button
             onClick={handleCreate}
             disabled={isCreating || !newBoardName.trim()}
@@ -100,7 +110,7 @@ export default function BoardDashboard() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {boards.map((board) => (
-              <BoardCard key={board.id} board={board} onAction={fetchBoards} />
+              <BoardCard key={board.id} board={board} onAction={fetchBoards} currentUserId={user?.id}/>
             ))}
           </div>
         )}

@@ -3,7 +3,11 @@
 import { useRouter } from "next/navigation";
 import { ShieldX } from "lucide-react";
 
-export function InvalidInvitePage() {
+interface InvalidInvitePageProps {
+  reason?: "private";
+}
+
+export function InvalidInvitePage({ reason }: InvalidInvitePageProps) {
   const router = useRouter();
 
   return (
@@ -14,7 +18,9 @@ export function InvalidInvitePage() {
         </div>
         <h2 className="text-lg font-semibold">Invalid invite link</h2>
         <p className="text-sm text-zinc-500">
-          This link is invalid or the board no longer exists.
+          {reason === "private"
+            ? "This board is private and cannot be joined with this link."
+            : "This link is invalid or the board no longer exists."}
         </p>
       </div>
       <button

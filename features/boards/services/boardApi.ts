@@ -31,11 +31,11 @@ export async function apiFetchBoards() {
   return res.json();
 }
 
-export async function apiCreateBoard(name: string) {
+export async function apiCreateBoard(name: string, isPublic: boolean) {
   const res = await fetch(`${BASE}/boards`, {
     ...baseOptions(),
     method: "POST",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, isPublic }),
   });
   if (!res.ok) throw new Error("Failed to create board");
   return res.json();

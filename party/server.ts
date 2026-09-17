@@ -1,4 +1,7 @@
 import type * as Party from "partykit/server";
+import { verifyPartyToken } from "@/lib/partyToken";
+
+const SECRET = process.env.PARTYKIT_SECRET || "development_secret";
 
 type CursorState = {
   userId: string;
@@ -23,16 +26,24 @@ type ClientMessage =
       avatarUrl?: string;
       color: string;
       isGuest?: boolean;
+      token?: string;
     }
   | { type: "shapes:sync"; shapes: any[] };
 
 export default class InkspaceParty implements Party.Server {
   private cursors = new Map<string, CursorState>();
+  private roles = new Map<string, "owner" | "editor" | "viewer" | null>();
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingUpserts = new Map<string, any>();
   private pendingDeletes = new Set<string>();
 
   constructor(readonly room: Party.Room) {}
+
+  private canEdit(connId: string) {
+    const role = this.roles.get(connId);
+    return role === "owner" || role === "editor";
+  }
+
 
   onConnect(conn: Party.Connection) {
     const cursors = Object.fromEntries(this.cursors);
@@ -41,32 +52,34 @@ export default class InkspaceParty implements Party.Server {
 
   onClose(conn: Party.Connection) {
     this.cursors.delete(conn.id);
-    this.room.broadcast(
-      JSON.stringify({ type: "cursor:leave", connectionId: conn.id }),
-    );
+    this.roles.delete(conn.id);
+    this.room.broadcast(JSON.stringify({ type: "cursor:leave", connectionId: conn.id }));
   }
 
   async onMessage(raw: string, sender: Party.Connection) {
     const msg = JSON.parse(raw) as ClientMessage;
 
     switch (msg.type) {
-      case "user:join":
-        this.cursors.set(sender.id, {
-          ...msg,
-          x: 0,
-          y: 0,
-          isGuest: msg.isGuest,
-        });
-        const { type, ...userInfo } = msg;
+      case "user:join": {
+        const payload = await verifyPartyToken(msg.token ?? null, SECRET);
+        const role = payload && payload.boardId === this.room.id ? payload.role : null;
+        this.roles.set(sender.id, role);
+
+        // Reconnect handling: if this userId already has a (stale) connection, drop it first
+        for (const [connId, c] of this.cursors) {
+          if (c.userId === msg.userId && connId !== sender.id) {
+            this.cursors.delete(connId);
+            this.roles.delete(connId);
+            this.room.broadcast(JSON.stringify({ type: "cursor:leave", connectionId: connId }));
+          }
+        }
+
+        this.cursors.set(sender.id, { userId: msg.userId, name: msg.name, avatarUrl: msg.avatarUrl, color: msg.color, x: 0, y: 0, isGuest: msg.isGuest });
         this.room.broadcast(
-          JSON.stringify({
-            type: "user:join",
-            connectionId: sender.id,
-            ...userInfo,
-          }),
-          [sender.id],
+          JSON.stringify({ type: "user:join", connectionId: sender.id, userId: msg.userId, name: msg.name, avatarUrl: msg.avatarUrl, color: msg.color, isGuest: msg.isGuest }),
         );
         break;
+      }
 
       case "cursor:move":
         const cursor = this.cursors.get(sender.id);
@@ -84,55 +97,32 @@ export default class InkspaceParty implements Party.Server {
         break;
 
       case "shape:add":
-        this.room.broadcast(
-          JSON.stringify({ type: "shape:add", shape: msg.shape }),
-          [sender.id],
-        );
+        if (!this.canEdit(sender.id)) return; // silently dropped for viewers/unauthorized
+        this.room.broadcast(JSON.stringify({ type: "shape:add", shape: msg.shape }), [sender.id]);
         this.pendingUpserts.set(msg.shape.id, msg.shape);
         this.scheduleSave();
         break;
 
       case "shape:update":
-        this.room.broadcast(
-          JSON.stringify({
-            type: "shape:update",
-            shapeId: msg.shapeId,
-            props: msg.props,
-          }),
-          [sender.id],
-        );
-        const existing = this.pendingUpserts.get(msg.shapeId) || {
-          id: msg.shapeId,
-        };
-        this.pendingUpserts.set(msg.shapeId, { ...existing, ...msg.props });
+        if (!this.canEdit(sender.id)) return;
+        this.room.broadcast(JSON.stringify({ type: "shape:update", shapeId: msg.shapeId, props: msg.props }), [sender.id]);
+        this.pendingUpserts.set(msg.shapeId, { ...(this.pendingUpserts.get(msg.shapeId) || { id: msg.shapeId }), ...msg.props });
         this.scheduleSave();
         break;
 
       case "shape:delete":
-        this.room.broadcast(
-          JSON.stringify({ type: "shape:delete", ids: msg.ids }),
-          [sender.id],
-        );
-        msg.ids.forEach((id) => {
-          this.pendingUpserts.delete(id);
-          this.pendingDeletes.add(id);
-        });
+        if (!this.canEdit(sender.id)) return;
+        this.room.broadcast(JSON.stringify({ type: "shape:delete", ids: msg.ids }), [sender.id]);
+        msg.ids.forEach((id) => { this.pendingUpserts.delete(id); this.pendingDeletes.add(id); });
         this.scheduleSave();
         break;
 
       case "shapes:sync":
-        this.room.broadcast(
-          JSON.stringify({ type: "shapes:sync", shapes: msg.shapes }),
-          [sender.id],
-        );
-
+        if (!this.canEdit(sender.id)) return;
+        this.room.broadcast(JSON.stringify({ type: "shapes:sync", shapes: msg.shapes }), [sender.id]);
         this.pendingUpserts.clear();
         this.pendingDeletes.clear();
-
-        msg.shapes.forEach((s) => {
-          this.pendingUpserts.set(s.id, s);
-        });
-
+        msg.shapes.forEach((s) => this.pendingUpserts.set(s.id, s));
         this.scheduleSave();
         break;
 
@@ -177,7 +167,7 @@ export default class InkspaceParty implements Party.Server {
           headers: {
             "Content-Type": "application/json",
             "x-partykit-secret":
-              process.env.PARTYKIT_SECRET || "development_secret",
+              SECRET,
           },
           body: JSON.stringify({ shapes: upserts, deletedIds: deletes }),
         },

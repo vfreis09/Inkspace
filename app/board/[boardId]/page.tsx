@@ -9,6 +9,7 @@ import ColorPicker from "@/features/boards/components/ColorPicker/ColorPicker";
 import { useStore } from "@/features/boards/store/useStore";
 import { RemoteCursor, usePartyKit } from "@/features/boards/hooks/usePartyKit";
 
+
 const Canvas = dynamic(
   () => import("@/features/boards/components/Canvas/Canvas"),
   {
@@ -34,6 +35,7 @@ export default function BoardPage({
   const resolvedParams = use(params);
   const router = useRouter();
   const boardId = resolvedParams.boardId;
+  
 
   const {
     loadBoard,
@@ -53,6 +55,7 @@ export default function BoardPage({
     isGuest,
     guestName,
     setGuestName,
+    canEdit,
   } = usePartyKit(boardId, setRemoteCursors);
 
   useEffect(() => {
@@ -224,11 +227,11 @@ export default function BoardPage({
             {activeUsers.length} online
           </span>
         </div>
-        <Toolbar />
-        {isColorPickerOpen && (
-          <div className="fixed left-24 top-1/2 -translate-y-1/2 z-50">
-            <ColorPicker onClose={toggleColorPicker} />
-          </div>
+        <Toolbar canEdit={canEdit} />
+        {isColorPickerOpen && canEdit && (
+        <div className="fixed left-24 top-1/2 -translate-y-1/2 z-50">
+          <ColorPicker onClose={toggleColorPicker} />
+        </div>
         )}
         <Canvas
           cursors={remoteCursors}
@@ -236,6 +239,7 @@ export default function BoardPage({
           onShapeAdd={sendShapeAdd}
           onShapeUpdate={sendShapeUpdate}
           onShapeDelete={sendShapeDelete}
+          canEdit={canEdit}
         />
       </div>
     </main>

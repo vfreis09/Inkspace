@@ -34,6 +34,7 @@ type CanvasProps = {
   onShapeUpdate?: (shapeId: string, props: Partial<Shape>) => void;
   onShapeDelete?: (ids: string[]) => void;
   cursors: RemoteCursor[];
+  canEdit?: boolean;
 };
 
 export default function Canvas({
@@ -42,6 +43,7 @@ export default function Canvas({
   onShapeUpdate,
   onShapeDelete,
   cursors,
+  canEdit = true,
 }: CanvasProps) {
   const {
     shapes,
@@ -163,8 +165,8 @@ export default function Canvas({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target !== document.body) return;
-
       if (
+        canEdit &&
         (e.key === "Delete" || e.key === "Backspace") &&
         selectedIds.length > 0
       ) {
@@ -216,6 +218,7 @@ export default function Canvas({
   const handleDragEnd = useCallback(
     (id: string, type: string, width: number, height: number) =>
       (e: KonvaEventObject<DragEvent>) => {
+      if (!canEdit) return;
         const n = e.target;
         const props =
           type === "circle"
@@ -224,12 +227,13 @@ export default function Canvas({
         updateShapeLocally(id, props, true);
         onShapeUpdate?.(id, props);
       },
-    [updateShapeLocally, onShapeUpdate],
+    [canEdit, updateShapeLocally, onShapeUpdate],
   );
 
   const handleTransformEnd = useCallback(
     (id: string, type: string, oldPoints?: number[]) =>
       (e: KonvaEventObject<Event>) => {
+      if (!canEdit) return;
         const n = e.target;
         const sx = n.scaleX();
         const sy = n.scaleY();
@@ -261,7 +265,7 @@ export default function Canvas({
         updateShapeLocally(id, props, true);
         onShapeUpdate?.(id, props);
       },
-    [updateShapeLocally, onShapeUpdate],
+    [canEdit, updateShapeLocally, onShapeUpdate],
   );
 
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
@@ -281,6 +285,7 @@ export default function Canvas({
     }
 
     if (
+      canEdit &&
       e.target === stage &&
       ["rect", "circle", "line", "arrow"].includes(currentTool)
     ) {
@@ -354,7 +359,7 @@ export default function Canvas({
         .map((s) => s.id);
       selectShapes(overlapping);
       setSelectionRect(null);
-    } else if (localCurrentShape) {
+    } else if (canEdit && localCurrentShape) {
       const shape: Shape = {
         ...(localCurrentShape as Shape),
         id: crypto.randomUUID(),

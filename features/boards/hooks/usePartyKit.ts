@@ -52,6 +52,7 @@ export function usePartyKit(
   const socketRef = useRef<PartySocket | null>(null);
   const cursorsRef = useRef<Map<string, RemoteCursor>>(new Map());
   const [activeUsers, setActiveUsers] = useState<RemoteCursor[]>([]);
+  const [role, setRole] = useState<"owner" | "editor" | "viewer" | null>(null);
 
   const lastCursorPositionRef = useRef<{ x: number; y: number } | null>(null);
   const cursorFrameRef = useRef<number | null>(null);
@@ -107,29 +108,49 @@ export function usePartyKit(
 
   useEffect(() => {
     if (!boardId || !userId) return;
+    let cancelled = false;
+    let localSocket: PartySocket | null = null;
 
-    const socket = new PartySocket({
-      host: process.env.NEXT_PUBLIC_PARTYKIT_HOST ?? "localhost:1999",
-      room: boardId,
-    });
+    async function connect() {
+      const res = await fetch(`/api/boards/${boardId}/party-token`, {
+        credentials: "include",
+      });
+      if (!res.ok || cancelled) return;
+      const { token, role: fetchedRole } = await res.json();
+      if (cancelled) return; 
 
-    socketRef.current = socket;
+      setRole(fetchedRole);
 
-    socket.addEventListener("open", () => {
-      socket.send(
-        JSON.stringify({
-          type: "user:join",
-          userId,
-          name: guestName || userName,
-          avatarUrl,
-          color: userColor(userId),
-          isGuest,
-        }),
-      );
-    });
+      const socket = new PartySocket({
+        host: process.env.NEXT_PUBLIC_PARTYKIT_HOST ?? "localhost:1999",
+        room: boardId,
+      });
 
-    socket.addEventListener("message", (event) => {
-      const msg = JSON.parse(event.data);
+      if (cancelled) { // NEW: guard against connecting after cancellation
+        socket.close();
+        return;
+      }
+
+      localSocket = socket;
+
+      socketRef.current = socket;
+
+      socket.addEventListener("open", () => {
+        socket.send(
+          JSON.stringify({
+            type: "user:join",
+            userId,
+            name: guestName || userName,
+            avatarUrl,
+            color: userColor(userId),
+            isGuest,
+            token,
+          }),
+        );
+      });
+
+      socket.addEventListener("message", (event) => {
+        const msg = JSON.parse(event.data);
 
       switch (msg.type) {
         case "cursors:init":
@@ -193,17 +214,15 @@ export function usePartyKit(
           }
           break;
       }
-    });
+      });
+    }
 
-    return () => socket.close();
-  }, [
-    boardId,
-    user,
-    addShapeFromRemote,
-    updateShapeFromRemote,
-    deleteShapesFromRemote,
-    emitPresence,
-  ]);
+      connect();
+  return () => { cancelled = true; 
+    localSocket?.close(); 
+    cursorsRef.current.clear();
+    socketRef.current?.close(); };
+}, [boardId, userId, addShapeFromRemote, updateShapeFromRemote, deleteShapesFromRemote, emitPresence]);
 
   const flushCursor = useCallback(() => {
     if (!socketRef.current || !lastCursorPositionRef.current) {
@@ -244,14 +263,8 @@ export function usePartyKit(
   }, []);
 
   return {
-    activeUsers,
-    isGuest,
-    guestName,
-    setGuestName,
-    sendCursor,
-    sendShapeAdd,
-    sendShapeUpdate,
-    sendShapeDelete,
-    sendFullSync,
-  };
-}
+  activeUsers, isGuest, guestName, setGuestName,
+  sendCursor, sendShapeAdd, sendShapeUpdate, sendShapeDelete, sendFullSync,
+  role,
+  canEdit: role === "owner" || role === "editor",
+}}
