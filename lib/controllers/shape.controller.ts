@@ -9,6 +9,7 @@ import {
   type BatchInput,
 } from "@/lib/services/shape.service";
 import { resolveAccess } from "@/lib/services/board.service";
+import { createSnapshot } from "../services/snapshot.service";
 
 export async function listShapesForBoard(boardId: string, userId: string | null) {
   const { board, role } = await resolveAccess(boardId, userId);
@@ -43,6 +44,7 @@ export async function batchUpsertForBoard(
   userId: string,
   shapes: BatchInput[],
   deletedIds: string[],
+  shouldSnapshot: boolean = false, // NEW
 ) {
   if (userId !== "system_partykit") {
     const { role } = await resolveAccess(boardId, userId);
@@ -50,5 +52,11 @@ export async function batchUpsertForBoard(
   }
 
   await batchUpsertShapes(boardId, userId, shapes, deletedIds);
+
+  if (shouldSnapshot) {
+    const currentShapes = await getShapesByBoardId(boardId);
+    await createSnapshot(boardId, currentShapes);
+  }
+
   return { ok: true, upserted: shapes.length, deleted: deletedIds.length };
 }

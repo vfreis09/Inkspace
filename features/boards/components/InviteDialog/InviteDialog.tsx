@@ -18,6 +18,8 @@ type BoardDetails = {
   members: Member[];
 };
 
+type Snapshot = { id: string; createdAt: string };
+
 export function InviteDialog({ boardId }: { boardId: string }) {
   const [board, setBoard] = useState<BoardDetails | null>(null);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
@@ -27,6 +29,9 @@ export function InviteDialog({ boardId }: { boardId: string }) {
   const [email, setEmail] = useState("");
   const [inviteAsRole, setInviteAsRole] = useState<"editor" | "viewer">("viewer");
   const [inviteStatus, setInviteStatus] = useState<string | null>(null);
+
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [isRestoring, setIsRestoring] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -42,6 +47,11 @@ export function InviteDialog({ boardId }: { boardId: string }) {
       if (tokenRes.ok) {
         const { inviteToken } = await tokenRes.json();
         setInviteToken(inviteToken);
+      }
+
+      const snapshotsRes = await fetch(`/api/boards/${boardId}/snapshots`, { credentials: "include" });
+      if (snapshotsRes.ok) {
+        setSnapshots(await snapshotsRes.json());
       }
     } catch (err) {
       setError("Failed to load board details");
@@ -128,6 +138,27 @@ export function InviteDialog({ boardId }: { boardId: string }) {
       setError("Failed to remove member");
     }
   }
+
+  async function restoreSnapshot(snapshotId: string) {
+  if (!confirm("Restore this version? This will replace the board's current content for everyone.")) {
+    return;
+  }
+  setIsRestoring(snapshotId);
+  try {
+    const res = await fetch(`/api/boards/${boardId}/snapshots/${snapshotId}/restore`, {
+      method: "POST",
+    });
+    if (res.ok) {
+      alert("Board restored.");
+    } else {
+      setError("Failed to restore this version");
+    }
+  } catch {
+    setError("Failed to restore this version");
+  } finally {
+    setIsRestoring(null);
+  }
+}
 
   if (isLoading) {
     return (
@@ -268,6 +299,27 @@ export function InviteDialog({ boardId }: { boardId: string }) {
           ))}
         </div>
       </div>
+      {snapshots.length > 0 && (
+        <div className="mt-6">
+          <h3 className="mb-2 text-xs font-semibold text-zinc-300">Version history</h3>
+          <div className="space-y-2">
+            {snapshots.map((s) => (
+              <div key={s.id} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2">
+                <span className="text-xs text-zinc-400">
+                  {new Date(s.createdAt).toLocaleString()}
+                </span>
+                <button
+                  onClick={() => restoreSnapshot(s.id)}
+                  disabled={isRestoring === s.id}
+                  className="rounded-lg border border-white/10 px-2 py-1 text-xs text-zinc-300 hover:bg-white/5 disabled:opacity-50"
+                >
+                  {isRestoring === s.id ? "Restoring..." : "Restore"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

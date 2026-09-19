@@ -31,6 +31,7 @@ model Board {
   owner       User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   members     BoardMember[]
   shapes      Shape[]
+  snapshots   BoardSnapshot[]
 }
 
 model BoardMember {
@@ -76,4 +77,14 @@ enum BoardRole {
   owner
   editor
   viewer
+}
+
+model BoardSnapshot {
+  id         String   @id @default(cuid())
+  boardId    String
+  shapesJson Json
+  createdAt  DateTime @default(now())
+  board      Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@index([boardId, createdAt])
 }

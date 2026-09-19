@@ -36,6 +36,8 @@ export default class InkspaceParty implements Party.Server {
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingUpserts = new Map<string, any>();
   private pendingDeletes = new Set<string>();
+  private flushCount = 0;
+  private readonly SNAPSHOT_EVERY_N_FLUSHES = 10;
 
   constructor(readonly room: Party.Room) {}
 
@@ -54,6 +56,23 @@ export default class InkspaceParty implements Party.Server {
     this.cursors.delete(conn.id);
     this.roles.delete(conn.id);
     this.room.broadcast(JSON.stringify({ type: "cursor:leave", connectionId: conn.id }));
+  }
+
+  async onRequest(req: Party.Request) {
+    if (req.method !== "POST") {
+      return new Response("Method not allowed", { status: 405 });
+    }
+
+    const authHeader = req.headers.get("x-partykit-secret");
+    if (authHeader !== SECRET) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    const body = await req.json() as { shapes: any[] };
+
+    this.room.broadcast(JSON.stringify({ type: "shapes:sync", shapes: body.shapes }));
+
+    return new Response("ok", { status: 200 });
   }
 
   async onMessage(raw: string, sender: Party.Connection) {
@@ -159,6 +178,9 @@ export default class InkspaceParty implements Party.Server {
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
+    this.flushCount++;
+    const shouldSnapshot = this.flushCount % this.SNAPSHOT_EVERY_N_FLUSHES === 0; 
+
     try {
       const response = await fetch(
         `${baseUrl}/api/boards/${this.room.id}/shapes/batch`,
@@ -169,7 +191,7 @@ export default class InkspaceParty implements Party.Server {
             "x-partykit-secret":
               SECRET,
           },
-          body: JSON.stringify({ shapes: upserts, deletedIds: deletes }),
+          body: JSON.stringify({ shapes: upserts, deletedIds: deletes, snapshot: shouldSnapshot, }),
         },
       );
 

@@ -9,7 +9,7 @@ export async function PUT(
 ) {
   const { boardId } = await params;
   const body = await req.json();
-  const { shapes = [], deletedIds = [] } = body;
+  const { shapes = [], deletedIds = [], snapshot = false  } = body;
 
   let executorId: string | null = null;
 
@@ -29,6 +29,7 @@ export async function PUT(
     executorId,
     shapes,
     deletedIds,
+    snapshot,
   );
 
   if (!result.ok) {
