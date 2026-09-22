@@ -53,6 +53,7 @@ export function usePartyKit(
   const cursorsRef = useRef<Map<string, RemoteCursor>>(new Map());
   const [activeUsers, setActiveUsers] = useState<RemoteCursor[]>([]);
   const [role, setRole] = useState<"owner" | "editor" | "viewer" | null>(null);
+  const [wasKicked, setWasKicked] = useState(false);
 
   const lastCursorPositionRef = useRef<{ x: number; y: number } | null>(null);
   const cursorFrameRef = useRef<number | null>(null);
@@ -217,6 +218,10 @@ export function usePartyKit(
             emitPresence();
           }
           break;
+
+        case "kicked":
+          setWasKicked(true);
+          break;
       }
       });
     }
@@ -271,4 +276,5 @@ export function usePartyKit(
   sendCursor, sendShapeAdd, sendShapeUpdate, sendShapeDelete, sendFullSync,
   role,
   canEdit: role === "owner" || role === "editor",
+  wasKicked,
 }}

@@ -56,7 +56,15 @@ export default function BoardPage({
     guestName,
     setGuestName,
     canEdit,
+    wasKicked,
   } = usePartyKit(boardId, setRemoteCursors);
+
+  useEffect(() => {
+    if (wasKicked) {
+      alert("You've been removed from this board by the owner.");
+      router.push("/");
+    }
+  }, [wasKicked, router]);
 
   useEffect(() => {
     if (boardId) loadBoard(boardId);

@@ -85,14 +85,20 @@ export default class InkspaceParty implements Party.Server {
           this.roles.set(connId, body.role);
 
           const conn = [...this.room.getConnections()].find((c) => c.id === connId);
-          conn?.send(JSON.stringify({ type: "role:update", role: body.role }));
+          if (body.role === null) {
+            // Explicit removal: tell them, then close the socket
+            conn?.send(JSON.stringify({ type: "kicked" }));
+            conn?.close();
+          } else {
+            conn?.send(JSON.stringify({ type: "role:update", role: body.role }));
+          }
         }
       }
       return new Response("ok", { status: 200 });
+      }
+      
+      return new Response("Bad request", { status: 400 });
     }
-
-    return new Response("Bad request", { status: 400 });
-  }
 
   async onMessage(raw: string, sender: Party.Connection) {
     const msg = JSON.parse(raw) as ClientMessage;
