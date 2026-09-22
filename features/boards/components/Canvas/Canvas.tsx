@@ -49,6 +49,7 @@ export default function Canvas({
     shapes,
     addShapeLocally,
     updateShapeLocally,
+    updateShapesBatchLocally,
     deleteShapesLocally,
     currentTool,
     selectedIds,
@@ -215,19 +216,86 @@ export default function Canvas({
       : { x: 0, y: 0 };
   };
 
+  const groupDragOffsets = useRef<Map<string, { x: number; y: number }>>(new Map());
+
+  const handleShapeDragStart = useCallback(
+    (id: string) => (e: KonvaEventObject<DragEvent>) => {
+      if (!canEdit || selectedIds.length <= 1 || !selectedIds.includes(id)) return;
+      const stage = e.target.getStage();
+      if (!stage) return;
+
+      groupDragOffsets.current.clear();
+      selectedIds.forEach((sid) => {
+        if (sid === id) return;
+        const node = stage.findOne("#" + sid);
+        if (node) {
+          groupDragOffsets.current.set(sid, {
+            x: node.x() - e.target.x(),
+            y: node.y() - e.target.y(),
+          });
+        }
+      });
+    },
+    [canEdit, selectedIds],
+  );
+
+
+  const handleShapeDragMove = useCallback(
+    (id: string) => (e: KonvaEventObject<DragEvent>) => {
+      if (!canEdit || selectedIds.length <= 1 || !selectedIds.includes(id)) return;
+      const stage = e.target.getStage();
+      if (!stage) return;
+
+      const draggedX = e.target.x();
+      const draggedY = e.target.y();
+
+      groupDragOffsets.current.forEach((offset, sid) => {
+        const node = stage.findOne("#" + sid);
+        if (node) {
+          node.x(draggedX + offset.x);
+          node.y(draggedY + offset.y);
+        }
+      });
+
+      trRef.current?.forceUpdate?.();
+      trRef.current?.getLayer()?.batchDraw();
+    },
+    [canEdit, selectedIds],
+  );
+
   const handleDragEnd = useCallback(
     (id: string, type: string, width: number, height: number) =>
       (e: KonvaEventObject<DragEvent>) => {
-      if (!canEdit) return;
+        if (!canEdit) return;
         const n = e.target;
-        const props =
+        const draggedProps =
           type === "circle"
             ? { x: n.x() - width / 2, y: n.y() - height / 2 }
             : { x: n.x(), y: n.y() };
-        updateShapeLocally(id, props, true);
-        onShapeUpdate?.(id, props);
+
+        if (selectedIds.length > 1 && selectedIds.includes(id)) {
+          const stage = n.getStage();
+          const updates = selectedIds.map((sid) => {
+            const shape = shapes.find((s) => s.id === sid)!;
+            if (sid === id) {
+              return { id: sid, oldProps: { x: shape.x, y: shape.y }, newProps: draggedProps };
+            }
+            const node = stage?.findOne("#" + sid);
+            const nx = node ? (shape.type === "circle" ? node.x() - shape.width / 2 : node.x()) : shape.x;
+            const ny = node ? (shape.type === "circle" ? node.y() - shape.height / 2 : node.y()) : shape.y;
+            return { id: sid, oldProps: { x: shape.x, y: shape.y }, newProps: { x: nx, y: ny } };
+          });
+
+          updateShapesBatchLocally(updates);
+          updates.forEach((u) => onShapeUpdate?.(u.id, u.newProps));
+          groupDragOffsets.current.clear();
+          return;
+        }
+
+        updateShapeLocally(id, draggedProps, true);
+        onShapeUpdate?.(id, draggedProps);
       },
-    [canEdit, updateShapeLocally, onShapeUpdate],
+    [canEdit, updateShapeLocally, onShapeUpdate, selectedIds, shapes, updateShapesBatchLocally],
   );
 
   const handleTransformEnd = useCallback(
@@ -279,7 +347,10 @@ export default function Canvas({
         setDrawStart(pos);
         setSelectionRect({ ...pos, width: 0, height: 0 });
       } else if (e.target.id()) {
-        selectShapes([e.target.id()]);
+        const clickedId = e.target.id();
+        if (!selectedIds.includes(clickedId)) {
+          selectShapes([clickedId]);
+        }
       }
       return;
     }
@@ -467,7 +538,8 @@ export default function Canvas({
               isSelected={selectedIds.includes(s.id)}
               isSelectMode={currentTool === "select"}
               cameraScale={camera.scale}
-              onDragMove={() => {}}
+              onDragStart={handleShapeDragStart(s.id)}
+              onDragMove={handleShapeDragMove(s.id)}
               onDragEnd={handleDragEnd(s.id, s.type, s.width, s.height)}
               onTransformEnd={handleTransformEnd(s.id, s.type, s.points)}
             />
@@ -479,6 +551,7 @@ export default function Canvas({
               isSelected={false}
               isSelectMode={false}
               cameraScale={camera.scale}
+              onDragStart={() => {}} 
               onDragMove={() => {}}
               onDragEnd={() => {}}
               onTransformEnd={() => {}}

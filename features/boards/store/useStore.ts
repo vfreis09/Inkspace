@@ -81,6 +81,9 @@ interface CanvasState {
   updateShapeFromRemote: (id: string, props: Partial<Shape>) => void;
   deleteShapesFromRemote: (ids: string[]) => void;
   replaceShapesFromRemote: (shapes: Shape[]) => void;
+  updateShapesBatchLocally: (
+    updates: { id: string; oldProps: Partial<Shape>; newProps: Partial<Shape> }[],
+  ) => void;
 }
 
 export const useStore = create<CanvasState>((set, get) => ({
@@ -261,6 +264,19 @@ export const useStore = create<CanvasState>((set, get) => ({
         canRedo: false,
       };
     });
+  },
+
+  updateShapesBatchLocally: (updates) => {
+    const action: Action = { type: "UPDATE_BATCH", updates };
+    set((state) => ({
+      shapes: state.shapes.map((s) => {
+        const u = updates.find((u) => u.id === s.id);
+        return u ? { ...s, ...u.newProps } : s;
+      }),
+      history: { past: [...state.history.past, action], future: [] },
+      canUndo: true,
+      canRedo: false,
+    }));
   },
 
   deleteShapesLocally: (ids) => {
