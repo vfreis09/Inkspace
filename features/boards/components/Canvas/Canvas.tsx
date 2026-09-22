@@ -537,6 +537,7 @@ export default function Canvas({
               shape={s}
               isSelected={selectedIds.includes(s.id)}
               isSelectMode={currentTool === "select"}
+              canEdit={canEdit} // NEW
               cameraScale={camera.scale}
               onDragStart={handleShapeDragStart(s.id)}
               onDragMove={handleShapeDragMove(s.id)}
@@ -550,8 +551,9 @@ export default function Canvas({
               shape={{ ...(localCurrentShape as Shape), id: "preview" }}
               isSelected={false}
               isSelectMode={false}
+              canEdit={canEdit} // NEW
               cameraScale={camera.scale}
-              onDragStart={() => {}} 
+              onDragStart={() => {}}
               onDragMove={() => {}}
               onDragEnd={() => {}}
               onTransformEnd={() => {}}
@@ -567,7 +569,7 @@ export default function Canvas({
               listening={false}
             />
           )}
-          {selectedIds.length > 0 && (
+          {selectedIds.length > 0 && canEdit && (
             <Transformer
               ref={trRef}
               rotateEnabled

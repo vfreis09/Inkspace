@@ -9,6 +9,7 @@ interface MemoizedShapeProps {
   shape: Shape;
   isSelected: boolean;
   isSelectMode: boolean;
+  canEdit: boolean;
   cameraScale: number;
   onDragStart: (e: KonvaEventObject<DragEvent>) => void;
   onDragMove: (e: KonvaEventObject<DragEvent>) => void;
@@ -20,6 +21,7 @@ export const MemoizedShape = React.memo(
   ({
     shape,
     isSelectMode,
+    canEdit,
     cameraScale,
     onDragStart,
     onDragMove,
@@ -46,7 +48,7 @@ export const MemoizedShape = React.memo(
       stroke,
       strokeWidth: strokeWidth / cameraScale,
       rotation,
-      draggable: isSelectMode,
+      draggable: isSelectMode && canEdit,
       onDragMove,
       onDragEnd,
       onDragStart,
@@ -116,6 +118,7 @@ export const MemoizedShape = React.memo(
     prev.shape === next.shape &&
     prev.isSelected === next.isSelected &&
     prev.isSelectMode === next.isSelectMode &&
+    prev.canEdit === next.canEdit &&
     prev.cameraScale === next.cameraScale,
 );
 
