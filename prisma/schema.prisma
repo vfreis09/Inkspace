@@ -71,6 +71,7 @@ enum ShapeType {
   circle
   line
   arrow
+  pen
 }
 
 enum BoardRole {

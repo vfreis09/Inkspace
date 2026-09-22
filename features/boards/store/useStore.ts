@@ -2,8 +2,8 @@ import { create } from "zustand";
 import { produce, Draft } from "immer";
 import { apiFetchShapes } from "@/features/boards/services/boardApi";
 
-export type ShapeType = "rect" | "circle" | "line" | "arrow";
-export type Tool = "select" | "rect" | "circle" | "line" | "arrow" | "pan";
+export type ShapeType = "rect" | "circle" | "line" | "arrow" | "pen";
+export type Tool = "select" | "rect" | "circle" | "line" | "arrow" | "pen" | "pan";
 
 export type Shape = {
   id: string;

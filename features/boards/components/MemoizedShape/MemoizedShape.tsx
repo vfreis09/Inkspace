@@ -92,6 +92,21 @@ export const MemoizedShape = React.memo(
       );
     }
 
+    if (type === "pen") {
+      return (
+        <Line
+          {...commonProps}
+          x={x}
+          y={y}
+          points={points ?? [0, 0]}
+          tension={0.5}
+          lineCap="round"
+          lineJoin="round"
+          fill={undefined}
+        />
+      );
+    }
+
     return null;
   },
   (prev, next) =>

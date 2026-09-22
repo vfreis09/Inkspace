@@ -6,7 +6,8 @@ import {
   Square,
   Circle,
   Minus,
-  MoveRight,
+  MoveRight, 
+  Pen,
   Palette,
 } from "lucide-react";
 import { useStore } from "@/features/boards/store/useStore";
@@ -31,6 +32,7 @@ export default function Toolbar({ canEdit = true }: { canEdit?: boolean }) {
     { id: "circle", icon: Circle, label: "Circle (O)", editOnly: true },
     { id: "line", icon: Minus, label: "Line (L)", editOnly: true },
     { id: "arrow", icon: MoveRight, label: "Arrow (A)", editOnly: true },
+    { id: "pen", icon: Pen, label: "Pen (P)", editOnly: true },
   ];
 
   return (

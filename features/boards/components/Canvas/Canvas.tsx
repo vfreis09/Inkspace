@@ -284,6 +284,24 @@ export default function Canvas({
       return;
     }
 
+    if (canEdit && e.target === stage && currentTool === "pen") {
+      const { activeStroke } = useStore.getState();
+      setDrawStart(pos);
+      setLocalCurrentShape({
+        type: "pen",
+        x: pos.x,
+        y: pos.y,
+        width: 0,
+        height: 0,
+        fill: "transparent",
+        stroke: activeStroke,
+        strokeWidth: brushSize,
+        points: [0, 0],
+        rotation: 0,
+      });
+      return;
+    }
+
     if (
       canEdit &&
       e.target === stage &&
@@ -334,6 +352,22 @@ export default function Canvas({
           ...prev,
           points: [0, 0, w, h],
         }));
+      } else if (currentTool === "pen" && localCurrentShape) {
+          setLocalCurrentShape((prev) => {
+            if (!prev || !prev.points) return prev;
+            const points = prev.points;
+            // points are relative to drawStart (prev.x, prev.y)
+            const relX = pos.x - drawStart.x;
+            const relY = pos.y - drawStart.y;
+
+            const lastX = points[points.length - 2];
+            const lastY = points[points.length - 1];
+            const dist = Math.hypot(relX - lastX, relY - lastY);
+
+            if (dist < 3) return prev; // throttle: skip points that are too close together
+
+            return { ...prev, points: [...points, relX, relY] };
+          });
       } else {
         setLocalCurrentShape((prev) => ({
           ...prev,
