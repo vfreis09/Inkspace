@@ -68,6 +68,9 @@ export async function updateMemberRoleForBoard(
   if (targetUserId === board.ownerId) return { ok: false, error: "cannot_change_owner" };
 
   const updated = await updateMemberRole(boardId, targetUserId, role);
+
+  await pushRoleUpdate(boardId, targetUserId, role);
+
   return { ok: true, member: updated };
 }
 
@@ -84,5 +87,28 @@ export async function removeMemberFromBoard(
   if (targetUserId === board.ownerId) return { ok: false, error: "cannot_remove_owner" };
 
   await removeMember(boardId, targetUserId);
+
+  await pushRoleUpdate(boardId, targetUserId, null);
+
   return { ok: true };
+}
+
+async function pushRoleUpdate(
+  boardId: string,
+  userId: string,
+  role: "owner" | "editor" | "viewer" | null,
+) {
+  try {
+    const partyHost = process.env.PARTYKIT_HOST || "http://localhost:1999";
+    await fetch(`${partyHost}/parties/main/${boardId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-partykit-secret": process.env.PARTYKIT_SECRET || "development_secret",
+      },
+      body: JSON.stringify({ type: "role:update", userId, role }),
+    });
+  } catch (err) {
+    console.error("Failed to push role update to PartyKit:", err);
+  }
 }

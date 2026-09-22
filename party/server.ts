@@ -68,11 +68,30 @@ export default class InkspaceParty implements Party.Server {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    const body = await req.json() as { shapes: any[] };
+    const body = await req.json() as
+      | { type?: undefined; shapes: any[] } // legacy shape: { shapes } with no `type` field
+      | { type: "shapes:sync"; shapes: any[] }
+      | { type: "role:update"; userId: string; role: "owner" | "editor" | "viewer" | null };
 
-    this.room.broadcast(JSON.stringify({ type: "shapes:sync", shapes: body.shapes }));
+    // Backward-compat: your existing snapshot-restore push sends { shapes } with no `type`
+    if (!("type" in body) || body.type === "shapes:sync") {
+      this.room.broadcast(JSON.stringify({ type: "shapes:sync", shapes: (body as any).shapes }));
+      return new Response("ok", { status: 200 });
+    }
 
-    return new Response("ok", { status: 200 });
+    if (body.type === "role:update") {
+      for (const [connId, cursor] of this.cursors) {
+        if (cursor.userId === body.userId) {
+          this.roles.set(connId, body.role);
+
+          const conn = [...this.room.getConnections()].find((c) => c.id === connId);
+          conn?.send(JSON.stringify({ type: "role:update", role: body.role }));
+        }
+      }
+      return new Response("ok", { status: 200 });
+    }
+
+    return new Response("Bad request", { status: 400 });
   }
 
   async onMessage(raw: string, sender: Party.Connection) {

@@ -205,6 +205,10 @@ export function usePartyKit(
         case "shapes:sync":
           useStore.setState({ shapes: msg.shapes });
           break;
+        
+        case "role:update":
+          setRole(msg.role);
+          break;
 
         case "user:rename":
           const toRename = cursorsRef.current.get(msg.connectionId);
