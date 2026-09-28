@@ -13,6 +13,8 @@ export type ShapeCreateInput = {
   strokeWidth: number;
   points?: number[];
   order?: number;
+  text?: string;
+  fontSize?: number; 
 };
 
 export type ShapeUpdateInput = Partial<Omit<ShapeCreateInput, "type">>;
@@ -54,6 +56,8 @@ export async function createShape(
       strokeWidth: data.strokeWidth,
       points: data.points ?? [],
       order: data.order ?? 0,
+      text: data.text ?? null,
+      fontSize: data.fontSize ?? null,
     },
   });
 
@@ -83,6 +87,8 @@ export async function updateShape(
       ...(data.strokeWidth !== undefined && { strokeWidth: data.strokeWidth }),
       ...(data.points !== undefined && { points: data.points }),
       ...(data.order !== undefined && { order: data.order }),
+      ...(data.text !== undefined && { text: data.text }),           // NEW
+      ...(data.fontSize !== undefined && { fontSize: data.fontSize }), // NEW
       lastEditedBy: userId,
     },
   });
@@ -122,6 +128,8 @@ export async function batchUpsertShapes(
         payload.strokeWidth = shape.strokeWidth;
       if (shape.points !== undefined) payload.points = shape.points;
       if (shape.order !== undefined) payload.order = shape.order;
+      if (shape.text !== undefined) payload.text = shape.text;
+      if (shape.fontSize !== undefined) payload.fontSize = shape.fontSize; 
 
       if (payload.type) {
         await tx.shape.upsert({

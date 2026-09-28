@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Rect, Circle, Line, Arrow } from "react-konva";
+import { Rect, Circle, Line, Arrow, Text} from "react-konva";
 import type { Shape } from "@/features/boards/store/useStore";
 import type { KonvaEventObject } from "konva/lib/Node";
 
@@ -10,11 +10,13 @@ interface MemoizedShapeProps {
   isSelected: boolean;
   isSelectMode: boolean;
   canEdit: boolean;
+  isEditing?: boolean;
   cameraScale: number;
   onDragStart: (e: KonvaEventObject<DragEvent>) => void;
   onDragMove: (e: KonvaEventObject<DragEvent>) => void;
   onDragEnd: (e: KonvaEventObject<DragEvent>) => void;
   onTransformEnd: (e: KonvaEventObject<Event>) => void;
+  onDblClick?: () => void;
 }
 
 export const MemoizedShape = React.memo(
@@ -22,11 +24,13 @@ export const MemoizedShape = React.memo(
     shape,
     isSelectMode,
     canEdit,
+    isEditing,
     cameraScale,
     onDragStart,
     onDragMove,
     onDragEnd,
     onTransformEnd,
+    onDblClick,
   }: MemoizedShapeProps) => {
     const {
       x,
@@ -40,6 +44,8 @@ export const MemoizedShape = React.memo(
       rotation,
       type,
       points,
+      text,
+      fontSize,
     } = shape;
 
     const commonProps = {
@@ -53,6 +59,7 @@ export const MemoizedShape = React.memo(
       onDragEnd,
       onDragStart,
       onTransformEnd,
+      onDblClick,
     };
 
     if (type === "rect") {
@@ -111,6 +118,24 @@ export const MemoizedShape = React.memo(
         />
       );
     }
+    
+    if (type === "text") {
+      if (isEditing) return null;
+
+      return (
+        <Text
+          {...commonProps}
+          x={x}
+          y={y}
+          text={text ?? ""}
+          fontSize={fontSize ?? 20}
+          fontFamily="Arial"
+          fill={fill}
+          stroke={undefined}
+          strokeWidth={undefined}
+        />
+      );
+    }
 
     return null;
   },
@@ -119,6 +144,7 @@ export const MemoizedShape = React.memo(
     prev.isSelected === next.isSelected &&
     prev.isSelectMode === next.isSelectMode &&
     prev.canEdit === next.canEdit &&
+    prev.isEditing === next.isEditing &&
     prev.cameraScale === next.cameraScale,
 );
 

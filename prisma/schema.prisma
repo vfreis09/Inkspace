@@ -63,6 +63,8 @@ model Shape {
   updatedAt    DateTime  @updatedAt
   boardId      String
   lastEditedBy String?
+  text         String?   @db.Text
+  fontSize     Float?    @default(20)
   board        Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
 }
 
@@ -72,6 +74,7 @@ enum ShapeType {
   line
   arrow
   pen
+  text
 }
 
 enum BoardRole {

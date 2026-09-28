@@ -2,8 +2,8 @@ import { create } from "zustand";
 import { produce, Draft } from "immer";
 import { apiFetchShapes } from "@/features/boards/services/boardApi";
 
-export type ShapeType = "rect" | "circle" | "line" | "arrow" | "pen";
-export type Tool = "select" | "rect" | "circle" | "line" | "arrow" | "pen" | "pan";
+export type ShapeType = "rect" | "circle" | "line" | "arrow" | "pen" | "text";
+export type Tool = "select" | "rect" | "circle" | "line" | "arrow" | "pen" | "text" | "pan";
 
 export type Shape = {
   id: string;
@@ -17,6 +17,8 @@ export type Shape = {
   stroke: string;
   strokeWidth: number;
   points?: number[];
+  text?: string;
+  fontSize?: number;
 };
 
 export type Action =

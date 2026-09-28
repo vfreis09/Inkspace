@@ -85,6 +85,19 @@ export default function Canvas({
     [camera.scale],
   );
 
+  const [editingText, setEditingText] = useState<{
+    id: string | null;
+    x: number;
+    y: number;
+    value: string;
+    fontSize: number;
+  } | null>(null);
+
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const editingTextRef = useRef(editingText);
+  editingTextRef.current = editingText;
+
   useEffect(() => {
     const check = () =>
       setSize({ width: window.innerWidth, height: window.innerHeight });
@@ -163,9 +176,25 @@ export default function Canvas({
     return () => setBroadcast(null);
   }, [setBroadcast, broadcastAction]);
 
+  const hasFocusedRef = useRef(false);
+
+  useEffect(() => {
+    if (editingText && !hasFocusedRef.current) {
+      hasFocusedRef.current = true;
+      textareaRef.current?.focus();
+      textareaRef.current?.select();
+    }
+    if (!editingText) {
+      hasFocusedRef.current = false;
+    }
+  }, [editingText]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target !== document.body) return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "TEXTAREA" || tag === "INPUT") return;
+
+      
       if (
         canEdit &&
         (e.key === "Delete" || e.key === "Backspace") &&
@@ -263,6 +292,65 @@ export default function Canvas({
     [canEdit, selectedIds],
   );
 
+  const handleTextDblClick = useCallback(
+    (shape: Shape) => {
+      if (!canEdit || shape.type !== "text") return;
+      selectShapes([]);
+      setEditingText({
+        id: shape.id,
+        x: shape.x,
+        y: shape.y,
+        value: shape.text ?? "",
+        fontSize: shape.fontSize ?? 20,
+      });
+    },
+    [canEdit, selectShapes],
+  );
+
+  const commitTextEdit = useCallback(() => {
+    const current = editingTextRef.current;
+    if (!current) return;
+    editingTextRef.current = null;
+
+    const trimmed = current.value.trim();
+
+    if (current.id) {
+      if (trimmed === "") {
+        deleteShapesLocally([current.id]);
+        onShapeDelete?.([current.id]);
+      } else {
+        const props = { text: trimmed };
+        updateShapeLocally(current.id, props, true);
+        onShapeUpdate?.(current.id, props);
+      }
+    } else if (trimmed !== "") {
+      const { activeFill } = useStore.getState();
+      const shape: Shape = {
+        id: crypto.randomUUID(),
+        type: "text",
+        x: current.x,
+        y: current.y,
+        width: 0,
+        height: 0,
+        rotation: 0,
+        fill: activeFill,
+        stroke: activeFill,
+        strokeWidth: 1,
+        text: trimmed,
+        fontSize: current.fontSize,
+      };
+      addShapeLocally(shape);
+      onShapeAdd?.(shape);
+    }
+
+    setEditingText(null);
+  }, [addShapeLocally, updateShapeLocally, deleteShapesLocally, onShapeAdd, onShapeUpdate, onShapeDelete]);
+
+  const cancelTextEdit = useCallback(() => {
+    editingTextRef.current = null;
+    setEditingText(null);
+  }, []);
+
   const handleDragEnd = useCallback(
     (id: string, type: string, width: number, height: number) =>
       (e: KonvaEventObject<DragEvent>) => {
@@ -299,9 +387,9 @@ export default function Canvas({
   );
 
   const handleTransformEnd = useCallback(
-    (id: string, type: string, oldPoints?: number[]) =>
+    (id: string, type: string, oldPoints?: number[], oldFontSize?: number) =>
       (e: KonvaEventObject<Event>) => {
-      if (!canEdit) return;
+        if (!canEdit) return;
         const n = e.target;
         const sx = n.scaleX();
         const sy = n.scaleY();
@@ -318,13 +406,10 @@ export default function Canvas({
         } else if (type === "circle") {
           const nw = Math.max(5, n.width() * sx);
           const nh = Math.max(5, n.height() * sy);
-          props = {
-            ...props,
-            x: n.x() - nw / 2,
-            y: n.y() - nh / 2,
-            width: nw,
-            height: nh,
-          };
+          props = { ...props, x: n.x() - nw / 2, y: n.y() - nh / 2, width: nw, height: nh };
+        } else if (type === "text") {
+          const scale = (sx + sy) / 2;
+          props.fontSize = Math.max(8, (oldFontSize ?? 20) * scale);
         } else {
           props.points = (oldPoints ?? [0, 0, 0, 0]).map((p, i) =>
             i % 2 === 0 ? p * sx : p * sy,
@@ -337,9 +422,15 @@ export default function Canvas({
   );
 
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
+    e.evt.preventDefault();
     const stage = e.target.getStage();
     if (!stage) return;
     const pos = getPointerPosition(stage);
+
+    if (editingTextRef.current) {
+      commitTextEdit();
+      return;
+    }
 
     if (currentTool === "select") {
       if (e.target === stage) {
@@ -370,6 +461,11 @@ export default function Canvas({
         points: [0, 0],
         rotation: 0,
       });
+      return;
+    }
+
+    if (canEdit && e.target === stage && currentTool === "text") {
+      setEditingText({ id: null, x: pos.x, y: pos.y, value: "", fontSize: 20 });
       return;
     }
 
@@ -537,12 +633,14 @@ export default function Canvas({
               shape={s}
               isSelected={selectedIds.includes(s.id)}
               isSelectMode={currentTool === "select"}
-              canEdit={canEdit} // NEW
+              canEdit={canEdit}
               cameraScale={camera.scale}
+              isEditing={editingText?.id === s.id}
               onDragStart={handleShapeDragStart(s.id)}
               onDragMove={handleShapeDragMove(s.id)}
               onDragEnd={handleDragEnd(s.id, s.type, s.width, s.height)}
-              onTransformEnd={handleTransformEnd(s.id, s.type, s.points)}
+              onTransformEnd={handleTransformEnd(s.id, s.type, s.points, s.fontSize)}
+              onDblClick={() => handleTextDblClick(s)}
             />
           ))}
           {localCurrentShape && (
@@ -569,7 +667,7 @@ export default function Canvas({
               listening={false}
             />
           )}
-          {selectedIds.length > 0 && canEdit && (
+          {selectedIds.length > 0 && canEdit && !editingText && (
             <Transformer
               ref={trRef}
               rotateEnabled
@@ -620,6 +718,41 @@ export default function Canvas({
           ))}
         </Layer>
       </Stage>
+      {editingText && (
+        <textarea
+          ref={textareaRef}
+          value={editingText.value}
+          autoFocus
+          rows={1}
+          wrap="off"
+          onChange={(e) =>
+            setEditingText((prev) => (prev ? { ...prev, value: e.target.value } : prev))
+          }
+          onBlur={commitTextEdit}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              cancelTextEdit();
+            } else if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              commitTextEdit();
+            }
+          }}
+          className="absolute z-40 resize-none overflow-hidden whitespace-pre border border-dashed border-indigo-500 bg-transparent outline-none"
+          style={{
+            left: editingText.x * camera.scale + camera.x,
+            top: editingText.y * camera.scale + camera.y,
+            fontSize: Math.min(Math.max(editingText.fontSize * camera.scale, 8), 120),
+            lineHeight: 1,
+            fontFamily: "Arial, sans-serif",
+            color: useStore.getState().activeFill,
+            padding: 0,
+            margin: 0,
+            width: `${Math.max(...editingText.value.split("\n").map((l) => l.length), 1) + 1}ch`,
+            height: `${editingText.value.split("\n").length}em`,
+          }}
+        />
+      )}
     </div>
   );
 }
