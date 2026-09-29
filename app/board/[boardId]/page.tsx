@@ -8,6 +8,7 @@ import Toolbar from "@/features/boards/components/Toolbar/Toolbar";
 import ColorPicker from "@/features/boards/components/ColorPicker/ColorPicker";
 import { useStore } from "@/features/boards/store/useStore";
 import { RemoteCursor, usePartyKit } from "@/features/boards/hooks/usePartyKit";
+import LayerControls from "@/features/boards/components/LayerControls/LayerControls";
 
 
 const Canvas = dynamic(
@@ -236,6 +237,7 @@ export default function BoardPage({
           </span>
         </div>
         <Toolbar canEdit={canEdit} />
+        <LayerControls canEdit={canEdit} />
         {isColorPickerOpen && canEdit && (
         <div className="fixed left-24 top-1/2 -translate-y-1/2 z-50">
           <ColorPicker onClose={toggleColorPicker} />

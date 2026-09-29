@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { produce, Draft } from "immer";
 import { apiFetchShapes } from "@/features/boards/services/boardApi";
+import { computeReorder, type ReorderMode } from "@/features/boards/utils/layerOrder";
 
 export type ShapeType = "rect" | "circle" | "line" | "arrow" | "pen" | "text";
 export type Tool = "select" | "rect" | "circle" | "line" | "arrow" | "pen" | "text" | "pan";
@@ -8,6 +9,7 @@ export type Tool = "select" | "rect" | "circle" | "line" | "arrow" | "pen" | "te
 export type Shape = {
   id: string;
   type: ShapeType;
+  order: number;
   x: number;
   y: number;
   width: number;
@@ -75,6 +77,8 @@ interface CanvasState {
   ) => void;
   deleteShapesLocally: (ids: string[]) => void;
   selectShapes: (ids: string[]) => void;
+  getNextOrder: () => number;
+  reorderSelected: (mode: ReorderMode) => void;
 
   undo: () => Action | null;
   redo: () => Action | null;
@@ -396,4 +400,23 @@ export const useStore = create<CanvasState>((set, get) => ({
       selectedIds: s.selectedIds.filter((x) => !ids.includes(x)),
     })),
   replaceShapesFromRemote: (shapes) => set({ shapes }),
+  getNextOrder: () =>
+  get().shapes.reduce((max, s) => Math.max(max, s.order), 0) + 1,
+
+  reorderSelected: (mode) => {
+    const { shapes, selectedIds } = get();
+    if (selectedIds.length === 0) return;
+
+    const changes = computeReorder(shapes, selectedIds, mode);
+    if (changes.length === 0) return;
+
+    const updates = changes.map((c) => ({
+      id: c.id,
+      oldProps: { order: c.oldOrder },
+      newProps: { order: c.newOrder },
+    }));
+
+    get().updateShapesBatchLocally(updates);
+    get().broadcast?.({ type: "UPDATE_BATCH", updates });
+  },
 }));

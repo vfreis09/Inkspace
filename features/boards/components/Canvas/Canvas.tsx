@@ -18,6 +18,7 @@ import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
 import type { Stage as KonvaStage } from "konva/lib/Stage";
 import type { Transformer as KonvaTransformer } from "konva/lib/shapes/Transformer";
 import { MemoizedShape } from "@/features/boards/components/MemoizedShape/MemoizedShape";
+import { compareByOrder } from "@/features/boards/utils/layerOrder";
 
 export type RemoteCursor = {
   connectionId: string;
@@ -58,6 +59,7 @@ export default function Canvas({
     undo,
     redo,
     setBroadcast,
+    reorderSelected,
   } = useStore();
 
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
@@ -83,6 +85,11 @@ export default function Canvas({
   const dynamicGridScale = useMemo(
     () => Math.pow(2, Math.floor(Math.log2(1 / camera.scale))),
     [camera.scale],
+  );
+
+  const orderedShapes = useMemo(
+    () => [...shapes].sort(compareByOrder),
+    [shapes],
   );
 
   const [editingText, setEditingText] = useState<{
@@ -225,6 +232,16 @@ export default function Canvas({
         const action = redo();
         if (action) broadcastAction(action, false);
       }
+      if (canEdit && (e.ctrlKey || e.metaKey) && selectedIds.length > 0) {
+        const right = e.key === "]" || e.key === "}";
+        const left = e.key === "[" || e.key === "{";
+        if (right || left) {
+          e.preventDefault();
+          reorderSelected(
+            right ? (e.shiftKey ? "front" : "forward") : (e.shiftKey ? "back" : "backward"),
+          );
+        }
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -236,6 +253,8 @@ export default function Canvas({
     redo,
     onShapeDelete,
     broadcastAction,
+    canEdit,
+    reorderSelected,
   ]);
 
   const getPointerPosition = (stage: KonvaStage) => {
@@ -327,6 +346,7 @@ export default function Canvas({
       const { activeFill } = useStore.getState();
       const shape: Shape = {
         id: crypto.randomUUID(),
+        order: useStore.getState().getNextOrder(),
         type: "text",
         x: current.x,
         y: current.y,
@@ -564,6 +584,7 @@ export default function Canvas({
       const shape: Shape = {
         ...(localCurrentShape as Shape),
         id: crypto.randomUUID(),
+        order: useStore.getState().getNextOrder(),
       };
       setLocalCurrentShape(null);
       addShapeLocally(shape);
@@ -627,7 +648,7 @@ export default function Canvas({
               listening={false}
             />
           )}
-          {shapes.map((s) => (
+          {orderedShapes.map((s) => (
             <MemoizedShape
               key={s.id}
               shape={s}
