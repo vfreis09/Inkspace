@@ -7,7 +7,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
-import { Stage, Layer, Rect, Transformer, Group, Path, Text } from "react-konva";
+import { Stage, Layer, Rect, Transformer, Group, Path, Text, Line } from "react-konva";
 import { useStore } from "@/features/boards/store/useStore";
 import type {
   Shape,
@@ -19,6 +19,7 @@ import type { Stage as KonvaStage } from "konva/lib/Stage";
 import type { Transformer as KonvaTransformer } from "konva/lib/shapes/Transformer";
 import { MemoizedShape } from "@/features/boards/components/MemoizedShape/MemoizedShape";
 import { compareByOrder } from "@/features/boards/utils/layerOrder";
+import { getShapeBounds, computeSnap, type GuideLines } from "@/features/boards/utils/alignmentGuides";
 
 export type RemoteCursor = {
   connectionId: string;
@@ -87,6 +88,16 @@ export default function Canvas({
     [camera.scale],
   );
 
+  const viewport = useMemo(
+    () => ({
+      left: -camera.x / camera.scale,
+      top: -camera.y / camera.scale,
+      right: (-camera.x + size.width) / camera.scale,
+      bottom: (-camera.y + size.height) / camera.scale,
+    }),
+    [camera, size],
+  );
+
   const orderedShapes = useMemo(
     () => [...shapes].sort(compareByOrder),
     [shapes],
@@ -104,6 +115,9 @@ export default function Canvas({
 
   const editingTextRef = useRef(editingText);
   editingTextRef.current = editingText;
+
+  const [guides, setGuides] = useState<GuideLines>({ vertical: [], horizontal: [] });
+  const SNAP_THRESHOLD_PX = 8;
 
   useEffect(() => {
     const check = () =>
@@ -268,6 +282,7 @@ export default function Canvas({
 
   const handleShapeDragStart = useCallback(
     (id: string) => (e: KonvaEventObject<DragEvent>) => {
+      setGuides({ vertical: [], horizontal: [] });
       if (!canEdit || selectedIds.length <= 1 || !selectedIds.includes(id)) return;
       const stage = e.target.getStage();
       if (!stage) return;
@@ -290,25 +305,57 @@ export default function Canvas({
 
   const handleShapeDragMove = useCallback(
     (id: string) => (e: KonvaEventObject<DragEvent>) => {
-      if (!canEdit || selectedIds.length <= 1 || !selectedIds.includes(id)) return;
+      if (!canEdit) return;
       const stage = e.target.getStage();
       if (!stage) return;
 
-      const draggedX = e.target.x();
-      const draggedY = e.target.y();
+      const shape = shapes.find((s) => s.id === id);
+      if (!shape) return;
 
-      groupDragOffsets.current.forEach((offset, sid) => {
-        const node = stage.findOne("#" + sid);
-        if (node) {
-          node.x(draggedX + offset.x);
-          node.y(draggedY + offset.y);
+      const isGroup = selectedIds.length > 1 && selectedIds.includes(id);
+
+      if (isGroup) {
+        const draggedX = e.target.x();
+        const draggedY = e.target.y();
+        groupDragOffsets.current.forEach((offset, sid) => {
+          const node = stage.findOne("#" + sid);
+          if (node) {
+            node.x(draggedX + offset.x);
+            node.y(draggedY + offset.y);
+          }
+        });
+      }
+
+      const liveX = shape.type === "circle" ? e.target.x() - shape.width / 2 : e.target.x();
+      const liveY = shape.type === "circle" ? e.target.y() - shape.height / 2 : e.target.y();
+
+      const draggedBounds = getShapeBounds({ ...shape, x: liveX, y: liveY });
+      const targets = shapes.filter((s) =>
+        isGroup ? !selectedIds.includes(s.id) : s.id !== id,
+      );
+      const threshold = SNAP_THRESHOLD_PX / camera.scale;
+      const { dx, dy, guides: newGuides } = computeSnap(draggedBounds, targets, threshold);
+
+      if (dx !== 0 || dy !== 0) {
+        e.target.x(e.target.x() + dx);
+        e.target.y(e.target.y() + dy);
+        if (isGroup) {
+          groupDragOffsets.current.forEach((_, sid) => {
+            const node = stage.findOne("#" + sid);
+            if (node) {
+              node.x(node.x() + dx);
+              node.y(node.y() + dy);
+            }
+          });
         }
-      });
+      }
+
+      setGuides(newGuides);
 
       trRef.current?.forceUpdate?.();
       trRef.current?.getLayer()?.batchDraw();
     },
-    [canEdit, selectedIds],
+    [canEdit, selectedIds, shapes, camera.scale],
   );
 
   const handleTextDblClick = useCallback(
@@ -375,6 +422,7 @@ export default function Canvas({
     (id: string, type: string, width: number, height: number) =>
       (e: KonvaEventObject<DragEvent>) => {
         if (!canEdit) return;
+        setGuides({ vertical: [], horizontal: [] });
         const n = e.target;
         const draggedProps =
           type === "circle"
@@ -662,6 +710,26 @@ export default function Canvas({
               onDragEnd={handleDragEnd(s.id, s.type, s.width, s.height)}
               onTransformEnd={handleTransformEnd(s.id, s.type, s.points, s.fontSize)}
               onDblClick={() => handleTextDblClick(s)}
+            />
+          ))}
+          {guides.vertical.map((x) => (
+            <Line
+              key={`v-${x}`}
+              points={[x, viewport.top, x, viewport.bottom]}
+              stroke="#ff4d8d"
+              strokeWidth={1 / camera.scale}
+              dash={[4 / camera.scale, 4 / camera.scale]}
+              listening={false}
+            />
+          ))}
+          {guides.horizontal.map((y) => (
+            <Line
+              key={`h-${y}`}
+              points={[viewport.left, y, viewport.right, y]}
+              stroke="#ff4d8d"
+              strokeWidth={1 / camera.scale}
+              dash={[4 / camera.scale, 4 / camera.scale]}
+              listening={false}
             />
           ))}
           {localCurrentShape && (
