@@ -119,6 +119,8 @@ export default function Canvas({
   const [guides, setGuides] = useState<GuideLines>({ vertical: [], horizontal: [] });
   const SNAP_THRESHOLD_PX = 8;
 
+  const shiftSelectRef = useRef(false);
+
   useEffect(() => {
     const check = () =>
       setSize({ width: window.innerWidth, height: window.innerHeight });
@@ -501,13 +503,24 @@ export default function Canvas({
     }
 
     if (currentTool === "select") {
+      const isShift = e.evt.shiftKey;
+      shiftSelectRef.current = isShift;
+
       if (e.target === stage) {
-        selectShapes([]);
+        if (!isShift) selectShapes([]);
         setDrawStart(pos);
         setSelectionRect({ ...pos, width: 0, height: 0 });
       } else if (e.target.id()) {
         const clickedId = e.target.id();
-        if (!selectedIds.includes(clickedId)) {
+        const currentSelection = useStore.getState().selectedIds;
+
+        if (isShift) {
+          selectShapes(
+            currentSelection.includes(clickedId)
+              ? currentSelection.filter((id) => id !== clickedId)
+              : [...currentSelection, clickedId],
+          );
+        } else if (!currentSelection.includes(clickedId)) {
           selectShapes([clickedId]);
         }
       }
@@ -626,7 +639,12 @@ export default function Canvas({
             s.y + s.height <= selectionRect.y + selectionRect.height,
         )
         .map((s) => s.id);
-      selectShapes(overlapping);
+        const currentSelection = useStore.getState().selectedIds;
+      selectShapes(
+        shiftSelectRef.current
+          ? Array.from(new Set([...currentSelection, ...overlapping]))
+          : overlapping,
+      );
       setSelectionRect(null);
     } else if (canEdit && localCurrentShape) {
       const shape: Shape = {
