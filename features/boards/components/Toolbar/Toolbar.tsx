@@ -10,7 +10,8 @@ import {
   Pen,
   Type,
   Palette,
-  Trash2
+  Trash2,
+  Grid3x3,
 } from "lucide-react";
 import { useStore } from "@/features/boards/store/useStore";
 import type { Tool } from "@/features/boards/store/useStore";
@@ -28,6 +29,8 @@ export default function Toolbar({
   const currentTool = useStore((state) => state.currentTool);
   const setTool = useStore((state) => state.setTool);
   const isColorPickerOpen = useStore((state) => state.isColorPickerOpen);
+  const showGrid = useStore((state) => state.showGrid);
+  const toggleGrid = useStore((state) => state.toggleGrid);
   const toggleColorPicker = useStore((state) => state.toggleColorPicker);
 
   const tools: {
@@ -88,6 +91,18 @@ export default function Toolbar({
         )}
       >
         <Palette size={20} />
+      </button>
+      <button
+        onClick={toggleGrid}
+        title={showGrid ? "Hide grid" : "Show grid"}
+        className={cn(
+          "p-3 rounded-xl transition-all duration-200",
+          showGrid
+            ? "text-gray-400 hover:bg-white/5 hover:text-gray-200"
+            : "bg-indigo-600/20 text-indigo-400",
+        )}
+      >
+        <Grid3x3 size={20} />
       </button>
       <div className="w-8 h-[1px] bg-white/10 my-1" />
       <button

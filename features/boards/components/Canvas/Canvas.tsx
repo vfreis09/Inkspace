@@ -61,6 +61,7 @@ export default function Canvas({
     redo,
     setBroadcast,
     reorderSelected,
+    showGrid,
   } = useStore();
 
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
@@ -701,7 +702,7 @@ export default function Canvas({
         style={{ cursor: currentTool === "pan" ? "grab" : "default" }}
       >
         <Layer>
-          {gridImage && (
+          {gridImage && showGrid && (
             <Rect
               x={-camera.x / camera.scale}
               y={-camera.y / camera.scale}

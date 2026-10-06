@@ -54,6 +54,8 @@ interface CanvasState {
   activeTarget: "fill" | "stroke";
   brushSize: number;
   isColorPickerOpen: boolean;
+  showGrid: boolean;
+  toggleGrid: () => void;
   history: { past: Action[]; future: Action[] };
   canUndo: boolean;
   canRedo: boolean;
@@ -231,6 +233,10 @@ export const useStore = create<CanvasState>((set, get) => ({
 
   toggleColorPicker: () =>
     set((state) => ({ isColorPickerOpen: !state.isColorPickerOpen })),
+
+  showGrid: true,
+  
+  toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
 
   addShapeLocally: (shape) => {
     const action: Action = { type: "ADD", shape };
