@@ -122,6 +122,8 @@ export default function Canvas({
 
   const shiftSelectRef = useRef(false);
 
+  const [worldPointer, setWorldPointer] = useState({ x: 0, y: 0 });
+
   useEffect(() => {
     const check = () =>
       setSize({ width: window.innerWidth, height: window.innerHeight });
@@ -579,7 +581,10 @@ export default function Canvas({
   const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
     const stage = e.target.getStage();
     if (!stage) return;
+    
     const pos = getPointerPosition(stage);
+
+    setWorldPointer(pos);
 
     onCursorMove?.(pos.x, pos.y);
 
@@ -861,6 +866,13 @@ export default function Canvas({
           }}
         />
       )}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-lg border border-white/10 bg-zinc-900/90 px-3 py-1.5 text-[11px] font-mono text-zinc-400 backdrop-blur-md">
+        <span>{Math.round(camera.scale * 100)}%</span>
+        <span className="text-zinc-700">|</span>
+        <span>
+          x: {Math.round(worldPointer.x)}, y: {Math.round(worldPointer.y)}
+        </span>
+      </div>
     </div>
   );
 }
