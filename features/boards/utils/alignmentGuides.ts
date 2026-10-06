@@ -39,6 +39,21 @@ export function getShapeBounds(shape: Shape): Bounds {
   };
 }
 
+export function getShapesBoundingBox(shapes: Shape[]): Bounds | null {
+  if (shapes.length === 0) return null;
+
+  const boundsList = shapes.map(getShapeBounds);
+
+  return {
+    left: Math.min(...boundsList.map((b) => b.left)),
+    top: Math.min(...boundsList.map((b) => b.top)),
+    right: Math.max(...boundsList.map((b) => b.right)),
+    bottom: Math.max(...boundsList.map((b) => b.bottom)),
+    centerX: 0, // unused for this purpose, computed below where needed
+    centerY: 0,
+  };
+}
+
 export type GuideLines = {
   vertical: number[];
   horizontal: number[];

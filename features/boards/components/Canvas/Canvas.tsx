@@ -19,7 +19,9 @@ import type { Stage as KonvaStage } from "konva/lib/Stage";
 import type { Transformer as KonvaTransformer } from "konva/lib/shapes/Transformer";
 import { MemoizedShape } from "@/features/boards/components/MemoizedShape/MemoizedShape";
 import { compareByOrder } from "@/features/boards/utils/layerOrder";
-import { getShapeBounds, computeSnap, type GuideLines } from "@/features/boards/utils/alignmentGuides";
+import { getShapeBounds, getShapesBoundingBox, computeSnap, type GuideLines } from "@/features/boards/utils/alignmentGuides";
+import { Home, Maximize } from "lucide-react";
+
 
 export type RemoteCursor = {
   connectionId: string;
@@ -665,11 +667,70 @@ export default function Canvas({
     setDrawStart(null);
   };
 
+  const CAMERA_PADDING_PX = 80;
+
+  const handleResetCamera = useCallback(() => {
+    setCamera({ x: 0, y: 0, scale: 1 });
+  }, []);
+
+  const handleZoomToFit = useCallback(() => {
+    const box = getShapesBoundingBox(shapes);
+    if (!box || size.width === 0) return;
+
+    const boxWidth = box.right - box.left;
+    const boxHeight = box.bottom - box.top;
+
+    if (boxWidth === 0 && boxHeight === 0) {
+      // Single point / zero-size content — just center on it at a sane default zoom
+      setCamera({
+        x: size.width / 2 - box.left,
+        y: size.height / 2 - box.top,
+        scale: 1,
+      });
+      return;
+    }
+
+    const availableWidth = size.width - CAMERA_PADDING_PX * 2;
+    const availableHeight = size.height - CAMERA_PADDING_PX * 2;
+
+    let scale = Math.min(
+      availableWidth / Math.max(boxWidth, 1),
+      availableHeight / Math.max(boxHeight, 1),
+    );
+    scale = Math.min(Math.max(scale, 0.001), 50); // respect your existing zoom clamp
+
+    const boxCenterX = (box.left + box.right) / 2;
+    const boxCenterY = (box.top + box.bottom) / 2;
+
+    setCamera({
+      scale,
+      x: size.width / 2 - boxCenterX * scale,
+      y: size.height / 2 - boxCenterY * scale,
+    });
+  }, [shapes, size]);
+
   if (size.width === 0) return null;
 
   return (
     <div className="h-screen w-screen bg-[#f8f8f7]">
-      <Stage
+      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2">
+        <button
+          onClick={handleResetCamera}
+          title="Reset view (0,0, 100%)"
+          className="rounded-xl border border-white/10 bg-zinc-900/90 p-3 text-zinc-400 shadow-2xl backdrop-blur-md transition-colors hover:bg-white/5 hover:text-white"
+        >
+          <Home size={18} />
+        </button>
+        <button
+          onClick={handleZoomToFit}
+          disabled={shapes.length === 0}
+          title="Zoom to fit all shapes"
+          className="rounded-xl border border-white/10 bg-zinc-900/90 p-3 text-zinc-400 shadow-2xl backdrop-blur-md transition-colors hover:bg-white/5 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Maximize size={18} />
+        </button>
+      </div>
+        <Stage
         ref={stageRef}
         width={size.width}
         height={size.height}
