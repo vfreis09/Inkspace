@@ -114,6 +114,18 @@ export default function BoardPage({
     }
   };
 
+  const shapes = useStore((s) => s.shapes);
+  const deleteShapesLocally = useStore((s) => s.deleteShapesLocally);
+
+  const handleClearBoard = () => {
+    if (!canEdit || shapes.length === 0) return;
+    if (!window.confirm("Clear the entire board? This can be undone with Ctrl+Z.")) return;
+
+    const ids = shapes.map((s) => s.id);
+    deleteShapesLocally(ids);
+    sendShapeDelete(ids);
+  };
+
   if (boardError) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center gap-6 bg-[#0a0a0a] text-white">
@@ -236,7 +248,11 @@ export default function BoardPage({
             {activeUsers.length} online
           </span>
         </div>
-        <Toolbar canEdit={canEdit} />
+        <Toolbar
+          canEdit={canEdit}
+          onClearBoard={handleClearBoard}
+          hasShapes={shapes.length > 0}
+        />
         <LayerControls canEdit={canEdit} />
         {isColorPickerOpen && canEdit && (
         <div className="fixed left-24 top-1/2 -translate-y-1/2 z-50">

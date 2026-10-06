@@ -10,12 +10,21 @@ import {
   Pen,
   Type,
   Palette,
+  Trash2
 } from "lucide-react";
 import { useStore } from "@/features/boards/store/useStore";
 import type { Tool } from "@/features/boards/store/useStore";
 import { cn } from "@/lib/utils";
 
-export default function Toolbar({ canEdit = true }: { canEdit?: boolean }) {
+export default function Toolbar({
+  canEdit = true,
+  onClearBoard,
+  hasShapes,
+}: {
+  canEdit?: boolean;
+  onClearBoard?: () => void;
+  hasShapes?: boolean;
+}) {
   const currentTool = useStore((state) => state.currentTool);
   const setTool = useStore((state) => state.setTool);
   const isColorPickerOpen = useStore((state) => state.isColorPickerOpen);
@@ -79,6 +88,20 @@ export default function Toolbar({ canEdit = true }: { canEdit?: boolean }) {
         )}
       >
         <Palette size={20} />
+      </button>
+      <div className="w-8 h-[1px] bg-white/10 my-1" />
+      <button
+        onClick={onClearBoard}
+        disabled={!canEdit || !hasShapes}
+        title="Clear board"
+        className={cn(
+          "p-3 rounded-xl transition-all duration-200",
+          !canEdit || !hasShapes
+            ? "text-gray-600 opacity-40 cursor-not-allowed"
+            : "text-gray-400 hover:bg-rose-500/10 hover:text-rose-400",
+        )}
+      >
+        <Trash2 size={20} />
       </button>
     </div>
   );
