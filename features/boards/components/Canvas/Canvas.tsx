@@ -13,6 +13,7 @@ import type {
   Shape,
   ShapeType,
   Action,
+  Tool,
 } from "@/features/boards/store/useStore";
 import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
 import type { Stage as KonvaStage } from "konva/lib/Stage";
@@ -56,6 +57,7 @@ export default function Canvas({
     updateShapesBatchLocally,
     deleteShapesLocally,
     currentTool,
+    setTool,
     selectedIds,
     selectShapes,
     brushSize,
@@ -217,12 +219,22 @@ export default function Canvas({
     }
   }, [editingText]);
 
+  const TOOL_SHORTCUTS: Record<string, Tool> = {
+    v: "select",
+    h: "pan",
+    r: "rect",
+    o: "circle",
+    l: "line",
+    a: "arrow",
+    p: "pen",
+    t: "text",
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "TEXTAREA" || tag === "INPUT") return;
 
-      
       if (
         canEdit &&
         (e.key === "Delete" || e.key === "Backspace") &&
@@ -253,6 +265,7 @@ export default function Canvas({
         const action = redo();
         if (action) broadcastAction(action, false);
       }
+
       if (canEdit && (e.ctrlKey || e.metaKey) && selectedIds.length > 0) {
         const right = e.key === "]" || e.key === "}";
         const left = e.key === "[" || e.key === "{";
@@ -262,6 +275,53 @@ export default function Canvas({
             right ? (e.shiftKey ? "front" : "forward") : (e.shiftKey ? "back" : "backward"),
           );
         }
+      }
+
+      // Tool switching
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        const key = e.key.toLowerCase();
+        const tool = TOOL_SHORTCUTS[key];
+        const editOnlyTools: Tool[] = ["rect", "circle", "line", "arrow", "pen", "text"];
+        if (tool && !(editOnlyTools.includes(tool) && !canEdit)) {
+          e.preventDefault();
+          setTool(tool);
+        }
+      }
+
+      // Escape to deselect (only when not editing text — that's handled separately in the textarea)
+      if (e.key === "Escape" && selectedIds.length > 0) {
+        e.preventDefault();
+        selectShapes([]);
+      }
+
+      // Select all
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        selectShapes(shapes.map((s) => s.id));
+      }
+
+      // Nudge selected shape(s) with arrow keys
+      if (
+        canEdit &&
+        selectedIds.length > 0 &&
+        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
+      ) {
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+        const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+        const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+
+        const updates = selectedIds.map((id) => {
+          const shape = shapes.find((s) => s.id === id)!;
+          return {
+            id,
+            oldProps: { x: shape.x, y: shape.y },
+            newProps: { x: shape.x + dx, y: shape.y + dy },
+          };
+        });
+
+        updateShapesBatchLocally(updates);
+        updates.forEach((u) => onShapeUpdate?.(u.id, u.newProps));
       }
     };
 
@@ -276,6 +336,11 @@ export default function Canvas({
     broadcastAction,
     canEdit,
     reorderSelected,
+    setTool,
+    selectShapes,
+    shapes,
+    updateShapesBatchLocally,
+    onShapeUpdate,
   ]);
 
   const getPointerPosition = (stage: KonvaStage) => {
