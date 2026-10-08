@@ -21,7 +21,8 @@ import type { Transformer as KonvaTransformer } from "konva/lib/shapes/Transform
 import { MemoizedShape } from "@/features/boards/components/MemoizedShape/MemoizedShape";
 import { compareByOrder } from "@/features/boards/utils/layerOrder";
 import { getShapeBounds, getShapesBoundingBox, computeSnap, type GuideLines } from "@/features/boards/utils/alignmentGuides";
-import { Home, Maximize } from "lucide-react";
+import { Download, Home, Maximize } from "lucide-react";
+import Konva from "konva";
 
 
 export type RemoteCursor = {
@@ -41,6 +42,24 @@ type CanvasProps = {
   cursors: RemoteCursor[];
   canEdit?: boolean;
 };
+
+const TOOL_SHORTCUTS: Record<string, Tool> = {
+  v: "select",
+  h: "pan",
+  r: "rect",
+  o: "circle",
+  l: "line",
+  a: "arrow",
+  p: "pen",
+  t: "text",
+};
+const EDIT_ONLY_TOOLS: Tool[] = ["rect", "circle", "line", "arrow", "pen", "text"];
+
+const SNAP_THRESHOLD_PX = 8;
+const CAMERA_PADDING_PX = 80;
+const EXPORT_PADDING = 40;
+const EXPORT_MAX_SIDE_PX = 8192;
+const EXPORT_MAX_AREA_PX = 16_000_000;
 
 export default function Canvas({
   onCursorMove,
@@ -87,6 +106,7 @@ export default function Canvas({
 
   const stageRef = useRef<KonvaStage | null>(null);
   const trRef = useRef<KonvaTransformer | null>(null);
+  const mainLayerRef = useRef<Konva.Layer | null>(null);
 
   const dynamicGridScale = useMemo(
     () => Math.pow(2, Math.floor(Math.log2(1 / camera.scale))),
@@ -281,8 +301,7 @@ export default function Canvas({
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         const key = e.key.toLowerCase();
         const tool = TOOL_SHORTCUTS[key];
-        const editOnlyTools: Tool[] = ["rect", "circle", "line", "arrow", "pen", "text"];
-        if (tool && !(editOnlyTools.includes(tool) && !canEdit)) {
+        if (tool && !(EDIT_ONLY_TOOLS.includes(tool) && !canEdit)) {
           e.preventDefault();
           setTool(tool);
         }
@@ -563,6 +582,7 @@ export default function Canvas({
 
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     e.evt.preventDefault();
+    if (e.evt.button !== 0) return;
     const stage = e.target.getStage();
     if (!stage) return;
     const pos = getPointerPosition(stage);
@@ -774,6 +794,82 @@ export default function Canvas({
     });
   }, [shapes, size]);
 
+
+  const EXPORT_PADDING = 40;
+  const EXPORT_MAX_SIDE_PX = 8192;
+  const EXPORT_MAX_AREA_PX = 16_000_000;
+
+  const handleExportPNG = useCallback(() => {
+    const mainLayer = mainLayerRef.current;
+    if (!mainLayer || shapes.length === 0) return;
+
+    const shapeIds = new Set(shapes.map((s) => s.id));
+    const nodes = mainLayer.getChildren((n) => shapeIds.has(n.id()));
+    if (nodes.length === 0) return;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    nodes.forEach((n) => {
+      const r = n.getClientRect({ skipStroke: true, relativeTo: mainLayer });
+      minX = Math.min(minX, r.x);
+      minY = Math.min(minY, r.y);
+      maxX = Math.max(maxX, r.x + r.width);
+      maxY = Math.max(maxY, r.y + r.height);
+    });
+
+    const originX = minX - EXPORT_PADDING;
+    const originY = minY - EXPORT_PADDING;
+    const worldW = Math.max(maxX - minX, 1) + EXPORT_PADDING * 2;
+    const worldH = Math.max(maxY - minY, 1) + EXPORT_PADDING * 2;
+
+    const pr = Math.min(
+      2,
+      EXPORT_MAX_SIDE_PX / Math.max(worldW, worldH),
+      Math.sqrt(EXPORT_MAX_AREA_PX / (worldW * worldH)),
+    );
+
+    const exportStage = new Konva.Stage({
+      container: document.createElement("div"),
+      width: Math.ceil(worldW * pr),
+      height: Math.ceil(worldH * pr),
+    });
+    exportStage.scale({ x: pr, y: pr });
+
+    const exportLayer = new Konva.Layer();
+    exportLayer.getCanvas().setPixelRatio(1);
+    exportStage.add(exportLayer);
+
+    exportLayer.add(
+      new Konva.Rect({ x: 0, y: 0, width: worldW, height: worldH, fill: "#f8f8f7", listening: false }),
+    );
+
+    const k = camera.scale;
+    nodes.forEach((n) => {
+      const c = n.clone({ x: n.x() - originX, y: n.y() - originY, draggable: false });
+      ["strokeWidth", "cornerRadius", "pointerLength", "pointerWidth"].forEach((attr) => {
+        const v = c.getAttr(attr);
+        if (typeof v === "number") c.setAttr(attr, v * k);
+      });
+      exportLayer.add(c);
+    });
+
+    exportStage
+      .toBlob({ pixelRatio: 1 })
+      .then((blob) => {
+        if (!blob) throw new Error("empty blob");
+        const url = URL.createObjectURL(blob as Blob);
+        const link = document.createElement("a");
+        link.download = `inkspace-board-${Date.now()}.png`;
+        link.href = url;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      })
+      .catch((err) => {
+        console.error("Export failed:", err);
+        alert("Export failed. Try again, or zoom in closer to your shapes.");
+      })
+      .finally(() => exportStage.destroy());
+  }, [shapes, camera.scale]);
+
   if (size.width === 0) return null;
 
   return (
@@ -794,6 +890,14 @@ export default function Canvas({
         >
           <Maximize size={18} />
         </button>
+        <button
+          onClick={handleExportPNG}
+          disabled={shapes.length === 0}
+          title="Export as PNG"
+          className="rounded-xl border border-white/10 bg-zinc-900/90 p-3 text-zinc-400 shadow-2xl backdrop-blur-md transition-colors hover:bg-white/5 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Download size={18} />
+        </button>
       </div>
         <Stage
         ref={stageRef}
@@ -807,6 +911,7 @@ export default function Canvas({
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onContextMenu={(e) => e.evt.preventDefault()}
         onWheel={(e) => {
           e.evt.preventDefault();
           const s = stageRef.current;
@@ -832,7 +937,7 @@ export default function Canvas({
         }
         style={{ cursor: currentTool === "pan" ? "grab" : "default" }}
       >
-        <Layer>
+        <Layer ref={mainLayerRef}>
           {gridImage && showGrid && (
             <Rect
               x={-camera.x / camera.scale}
@@ -888,7 +993,7 @@ export default function Canvas({
               shape={{ ...(localCurrentShape as Shape), id: "preview" }}
               isSelected={false}
               isSelectMode={false}
-              canEdit={canEdit} // NEW
+              canEdit={canEdit}
               cameraScale={camera.scale}
               onDragStart={() => {}}
               onDragMove={() => {}}
