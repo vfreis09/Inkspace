@@ -66,24 +66,29 @@ export default function BoardCard({ board, onAction, currentUserId }: BoardCardP
     setLocalBoard(board);
   }, [board]);
 
+  const menuItemClass =
+    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-zinc-700 transition-colors hover:bg-black/5 dark:text-zinc-300 dark:hover:bg-white/5";
+
   return (
     <div
-      className="group relative rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-indigo-500/50 cursor-pointer transition-all"
+      className="group relative cursor-pointer rounded-2xl border border-black/10 bg-white p-5 shadow-sm transition-all hover:border-indigo-500/50 dark:border-white/10 dark:bg-white/5 dark:shadow-none"
       onClick={() => router.push(`/board/${localBoard.id}`)}
     >
-      <div className="mb-4 h-28 rounded-xl bg-white/5 flex items-center justify-center overflow-hidden transition-colors group-hover:bg-white/10">
+      <div className="mb-4 flex h-28 items-center justify-center overflow-hidden rounded-xl bg-black/5 transition-colors group-hover:bg-black/10 dark:bg-white/5 dark:group-hover:bg-white/10">
         {localBoard.thumbnail ? (
           <img src={localBoard.thumbnail} alt={localBoard.name} className="h-full w-full object-cover" />
         ) : (
-          <LayoutDashboard size={28} className="text-zinc-600" />
+          <LayoutDashboard size={28} className="text-zinc-400 dark:text-zinc-600" />
         )}
       </div>
       <div className="flex items-center justify-between gap-2">
-        <div className="flex flex-col gap-1 min-w-0">
-          <h3 className="text-sm font-semibold text-zinc-200 truncate pr-2">{localBoard.name}</h3>
+        <div className="flex min-w-0 flex-col gap-1">
+          <h3 className="truncate pr-2 text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+            {localBoard.name}
+          </h3>
           <div className="flex items-center gap-2 text-[10px] text-zinc-500">
             <span className="flex items-center gap-1">
-              {localBoard.isPublic ? <Globe size={10} className="text-indigo-400" /> : <Lock size={10} />}
+              {localBoard.isPublic ? <Globe size={10} className="text-indigo-500 dark:text-indigo-400" /> : <Lock size={10} />}
               {localBoard.isPublic ? "Public" : "Private"}
             </span>
             <span>•</span>
@@ -93,21 +98,21 @@ export default function BoardCard({ board, onAction, currentUserId }: BoardCardP
         <div className="relative" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="rounded-lg p-2 hover:bg-white/10 text-zinc-400 transition-colors"
+            className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-black/5 dark:text-zinc-400 dark:hover:bg-white/10"
           >
             <MoreVertical size={16} />
           </button>
           {isMenuOpen && (
             <>
               <div className="fixed inset-0 z-20" onClick={() => setIsMenuOpen(false)} />
-              <div className="absolute right-0 mt-2 z-30 w-44 rounded-xl border border-white/10 bg-zinc-900 p-1.5 shadow-2xl">
+              <div className="absolute right-0 z-30 mt-2 w-44 rounded-xl border border-black/10 bg-white p-1.5 shadow-2xl dark:border-white/10 dark:bg-zinc-900">
                 {isOwner && (
                   <button
                     onClick={() => {
                       setIsManageOpen(true);
                       setIsMenuOpen(false);
                     }}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-zinc-300 hover:bg-white/5 transition-colors"
+                    className={menuItemClass}
                   >
                     <Users size={14} /> Manage access
                   </button>
@@ -118,7 +123,7 @@ export default function BoardCard({ board, onAction, currentUserId }: BoardCardP
                     if (newName) handleUpdate({ name: newName.trim() });
                     setIsMenuOpen(false);
                   }}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-zinc-300 hover:bg-white/5 transition-colors"
+                  className={menuItemClass}
                 >
                   <Pencil size={14} /> Rename
                 </button>
@@ -128,16 +133,16 @@ export default function BoardCard({ board, onAction, currentUserId }: BoardCardP
                       handleUpdate({ isPublic: !localBoard.isPublic });
                       setIsMenuOpen(false);
                     }}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-zinc-300 hover:bg-white/5 transition-colors"
+                    className={menuItemClass}
                   >
                     {localBoard.isPublic ? <Lock size={14} /> : <Globe size={14} />}
                     Make {localBoard.isPublic ? "Private" : "Public"}
                   </button>
                 )}
-                <div className="my-1 h-[1px] bg-white/5" />
+                <div className="my-1 h-[1px] bg-black/5 dark:bg-white/5" />
                 <button
                   onClick={handleDelete}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-rose-400 hover:bg-rose-500/10 transition-colors"
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-rose-500 transition-colors hover:bg-rose-500/10 dark:text-rose-400"
                 >
                   <Trash2 size={14} /> Delete
                 </button>
@@ -156,7 +161,7 @@ export default function BoardCard({ board, onAction, currentUserId }: BoardCardP
           }}
         >
           <div
-            className="w-96 rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl"
+            className="w-96 rounded-2xl border border-black/10 bg-white shadow-2xl dark:border-white/10 dark:bg-zinc-900"
             onClick={(e) => e.stopPropagation()}
           >
             <InviteDialog boardId={localBoard.id} />

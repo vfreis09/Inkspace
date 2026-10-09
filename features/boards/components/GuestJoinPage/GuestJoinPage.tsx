@@ -9,11 +9,7 @@ interface GuestJoinPageProps {
   boardName: string;
 }
 
-export function GuestJoinPage({
-  boardId,
-  token,
-  boardName,
-}: GuestJoinPageProps) {
+export function GuestJoinPage({ boardId, token }: GuestJoinPageProps) {
   const router = useRouter();
 
   useEffect(() => {
@@ -23,5 +19,9 @@ export function GuestJoinPage({
     router.replace(`/board/${boardId}`);
   }, []);
 
-  return <div>Joining board...</div>;
+  return (
+    <div className="flex h-screen w-full items-center justify-center bg-zinc-50 text-sm text-zinc-500 dark:bg-[#0a0a0a] dark:text-zinc-400">
+      Joining board...
+    </div>
+  );
 }

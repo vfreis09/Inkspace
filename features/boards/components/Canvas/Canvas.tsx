@@ -23,6 +23,8 @@ import { compareByOrder } from "@/features/boards/utils/layerOrder";
 import { getShapeBounds, getShapesBoundingBox, computeSnap, type GuideLines } from "@/features/boards/utils/alignmentGuides";
 import { Download, Home, Maximize } from "lucide-react";
 import Konva from "konva";
+import { useTheme } from "next-themes";
+import { CANVAS_THEME } from "@/features/boards/utils/canvasTheme";
 
 
 export type RemoteCursor = {
@@ -86,6 +88,9 @@ export default function Canvas({
     reorderSelected,
     showGrid,
   } = useStore();
+
+  const { resolvedTheme } = useTheme();
+  const palette = CANVAS_THEME[resolvedTheme === "dark" ? "dark" : "light"];
 
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -163,20 +168,20 @@ export default function Canvas({
     canvas.height = step;
     const ctx = canvas.getContext("2d");
     if (ctx) {
-      ctx.strokeStyle = "#d1d1ca";
+      ctx.strokeStyle = palette.gridLine;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(step, 0);
       ctx.lineTo(step, step);
       ctx.lineTo(0, step);
       ctx.stroke();
-      ctx.fillStyle = "#a1a19a";
+      ctx.fillStyle = palette.gridDot;
       ctx.fillRect(step - 1, step - 1, 2, 2);
     }
     const img = new Image();
-    img.src = canvas.toDataURL();
     img.onload = () => setGridImage(img);
-  }, []);
+    img.src = canvas.toDataURL();
+  }, [palette.gridLine, palette.gridDot]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -839,7 +844,7 @@ export default function Canvas({
     exportStage.add(exportLayer);
 
     exportLayer.add(
-      new Konva.Rect({ x: 0, y: 0, width: worldW, height: worldH, fill: "#f8f8f7", listening: false }),
+      new Konva.Rect({ x: 0, y: 0, width: worldW, height: worldH, fill: palette.bg, listening: false }),
     );
 
     const k = camera.scale;
@@ -868,12 +873,12 @@ export default function Canvas({
         alert("Export failed. Try again, or zoom in closer to your shapes.");
       })
       .finally(() => exportStage.destroy());
-  }, [shapes, camera.scale]);
+  }, [shapes, camera.scale, palette.bg]);
 
   if (size.width === 0) return null;
 
   return (
-    <div className="h-screen w-screen bg-[#f8f8f7]">
+    <div className="h-screen w-screen" style={{ backgroundColor: palette.bg }}>
       <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2">
         <button
           onClick={handleResetCamera}

@@ -11,7 +11,7 @@ export function InvalidInvitePage({ reason }: InvalidInvitePageProps) {
   const router = useRouter();
 
   return (
-    <div className="flex h-screen w-full flex-col items-center justify-center gap-6 bg-[#0a0a0a] text-white">
+    <div className="flex h-screen w-full flex-col items-center justify-center gap-6 bg-zinc-50 text-zinc-900 dark:bg-[#0a0a0a] dark:text-white">
       <div className="flex flex-col items-center gap-3">
         <div className="rounded-full bg-rose-500/10 p-4 text-rose-500">
           <ShieldX size={32} />
@@ -25,7 +25,7 @@ export function InvalidInvitePage({ reason }: InvalidInvitePageProps) {
       </div>
       <button
         onClick={() => router.push("/")}
-        className="rounded-xl bg-white/5 px-6 py-3 text-sm font-medium transition-colors hover:bg-white/10"
+        className="rounded-xl bg-black/5 px-6 py-3 text-sm font-medium transition-colors hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10"
       >
         Back to Dashboard
       </button>

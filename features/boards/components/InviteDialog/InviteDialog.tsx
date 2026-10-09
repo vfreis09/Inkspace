@@ -20,6 +20,15 @@ type BoardDetails = {
 
 type Snapshot = { id: string; createdAt: string };
 
+const inputClass =
+  "rounded-lg border border-black/10 bg-black/5 px-2 py-1.5 text-sm outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5";
+const selectClass =
+  "rounded-lg border border-black/10 bg-white px-2 py-1 text-xs text-zinc-900 dark:border-white/10 dark:bg-zinc-800 dark:text-white";
+const iconButtonClass =
+  "rounded-lg border border-black/10 p-1.5 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5";
+const sectionTitleClass = "mb-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300";
+const rowClass = "flex items-center justify-between rounded-lg bg-black/5 px-3 py-2 dark:bg-white/5";
+
 export function InviteDialog({ boardId }: { boardId: string }) {
   const [board, setBoard] = useState<BoardDetails | null>(null);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
@@ -140,25 +149,25 @@ export function InviteDialog({ boardId }: { boardId: string }) {
   }
 
   async function restoreSnapshot(snapshotId: string) {
-  if (!confirm("Restore this version? This will replace the board's current content for everyone.")) {
-    return;
-  }
-  setIsRestoring(snapshotId);
-  try {
-    const res = await fetch(`/api/boards/${boardId}/snapshots/${snapshotId}/restore`, {
-      method: "POST",
-    });
-    if (res.ok) {
-      alert("Board restored.");
-    } else {
-      setError("Failed to restore this version");
+    if (!confirm("Restore this version? This will replace the board's current content for everyone.")) {
+      return;
     }
-  } catch {
-    setError("Failed to restore this version");
-  } finally {
-    setIsRestoring(null);
+    setIsRestoring(snapshotId);
+    try {
+      const res = await fetch(`/api/boards/${boardId}/snapshots/${snapshotId}/restore`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        alert("Board restored.");
+      } else {
+        setError("Failed to restore this version");
+      }
+    } catch {
+      setError("Failed to restore this version");
+    } finally {
+      setIsRestoring(null);
+    }
   }
-}
 
   if (isLoading) {
     return (
@@ -169,7 +178,7 @@ export function InviteDialog({ boardId }: { boardId: string }) {
   }
 
   if (!board) {
-    return <div className="p-6 text-sm text-rose-400">{error ?? "Couldn't load this board"}</div>;
+    return <div className="p-6 text-sm text-rose-500 dark:text-rose-400">{error ?? "Couldn't load this board"}</div>;
   }
 
   const link = inviteToken
@@ -177,27 +186,27 @@ export function InviteDialog({ boardId }: { boardId: string }) {
     : null;
 
   return (
-    <div className="max-h-[80vh] overflow-y-auto p-5 text-white">
-      <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-400">
+    <div className="max-h-[80vh] overflow-y-auto p-5 text-zinc-900 dark:text-white">
+      <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
         Manage access
       </h2>
-      {error && <p className="mb-3 text-xs text-rose-400">{error}</p>}
+      {error && <p className="mb-3 text-xs text-rose-500 dark:text-rose-400">{error}</p>}
 
       {/* Invite by email */}
       <div className="mb-6">
-        <h3 className="mb-2 text-xs font-semibold text-zinc-300">Invite by email</h3>
+        <h3 className={sectionTitleClass}>Invite by email</h3>
         <div className="flex gap-2">
           <input
             type="email"
             placeholder="person@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="flex-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm outline-none focus:border-indigo-500"
+            className={`flex-1 ${inputClass}`}
           />
           <select
             value={inviteAsRole}
             onChange={(e) => setInviteAsRole(e.target.value as "editor" | "viewer")}
-            className="rounded-lg border border-white/10 bg-zinc-800 px-2 py-1.5 text-sm"
+            className={`${selectClass} py-1.5 text-sm`}
           >
             <option value="viewer">Viewer</option>
             <option value="editor">Editor</option>
@@ -205,7 +214,7 @@ export function InviteDialog({ boardId }: { boardId: string }) {
           <button
             onClick={sendInvite}
             disabled={!email.trim()}
-            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-50"
+            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
           >
             Invite
           </button>
@@ -215,8 +224,8 @@ export function InviteDialog({ boardId }: { boardId: string }) {
 
       {/* Visibility */}
       <div className="mb-6">
-        <h3 className="mb-2 text-xs font-semibold text-zinc-300">Board visibility</h3>
-        <label className="flex items-center gap-2 text-sm text-zinc-300">
+        <h3 className={sectionTitleClass}>Board visibility</h3>
+        <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
           <input
             type="checkbox"
             checked={board.isPublic}
@@ -229,34 +238,34 @@ export function InviteDialog({ boardId }: { boardId: string }) {
       {/* Invite link */}
       {board.isPublic && link && (
         <div className="mb-6">
-          <h3 className="mb-2 text-xs font-semibold text-zinc-300">Invite link</h3>
+          <h3 className={sectionTitleClass}>Invite link</h3>
           <div className="flex items-center gap-2">
             <input
               readOnly
               value={link}
-              className="flex-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-400"
+              className={`flex-1 text-xs text-zinc-600 dark:text-zinc-400 ${inputClass}`}
             />
             <button
               onClick={() => navigator.clipboard.writeText(link)}
-              className="rounded-lg border border-white/10 p-1.5 hover:bg-white/5"
+              className={iconButtonClass}
               title="Copy link"
             >
               <Copy size={14} />
             </button>
             <button
               onClick={regenerateLink}
-              className="rounded-lg border border-white/10 p-1.5 hover:bg-white/5"
+              className={iconButtonClass}
               title="Regenerate link (revokes old one)"
             >
               <RefreshCw size={14} />
             </button>
           </div>
-          <label className="mt-2 flex items-center gap-2 text-xs text-zinc-400">
+          <label className="mt-2 flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
             Link grants:
             <select
               value={board.inviteRole}
               onChange={(e) => updateInviteRole(e.target.value as "editor" | "viewer")}
-              className="rounded-lg border border-white/10 bg-zinc-800 px-2 py-1 text-xs"
+              className={selectClass}
             >
               <option value="viewer">Viewer</option>
               <option value="editor">Editor</option>
@@ -267,12 +276,12 @@ export function InviteDialog({ boardId }: { boardId: string }) {
 
       {/* Members */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold text-zinc-300">Members</h3>
+        <h3 className={sectionTitleClass}>Members</h3>
         <div className="space-y-2">
           {board.members.map((m) => (
-            <div key={m.userId} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2">
+            <div key={m.userId} className={rowClass}>
               <div className="min-w-0">
-                <p className="truncate text-sm text-zinc-200">{m.user.name ?? m.user.email}</p>
+                <p className="truncate text-sm text-zinc-800 dark:text-zinc-200">{m.user.name ?? m.user.email}</p>
                 <p className="truncate text-xs text-zinc-500">{m.user.email}</p>
               </div>
               {m.role === "owner" ? (
@@ -282,14 +291,14 @@ export function InviteDialog({ boardId }: { boardId: string }) {
                   <select
                     value={m.role}
                     onChange={(e) => changeMemberRole(m.userId, e.target.value as "editor" | "viewer")}
-                    className="rounded-lg border border-white/10 bg-zinc-800 px-2 py-1 text-xs"
+                    className={selectClass}
                   >
                     <option value="editor">Editor</option>
                     <option value="viewer">Viewer</option>
                   </select>
                   <button
                     onClick={() => removeMember(m.userId)}
-                    className="text-xs text-rose-400 hover:underline"
+                    className="text-xs text-rose-500 hover:underline dark:text-rose-400"
                   >
                     Remove
                   </button>
@@ -299,19 +308,21 @@ export function InviteDialog({ boardId }: { boardId: string }) {
           ))}
         </div>
       </div>
+
+      {/* Version history */}
       {snapshots.length > 0 && (
         <div className="mt-6">
-          <h3 className="mb-2 text-xs font-semibold text-zinc-300">Version history</h3>
+          <h3 className={sectionTitleClass}>Version history</h3>
           <div className="space-y-2">
             {snapshots.map((s) => (
-              <div key={s.id} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2">
-                <span className="text-xs text-zinc-400">
+              <div key={s.id} className={rowClass}>
+                <span className="text-xs text-zinc-600 dark:text-zinc-400">
                   {new Date(s.createdAt).toLocaleString()}
                 </span>
                 <button
                   onClick={() => restoreSnapshot(s.id)}
                   disabled={isRestoring === s.id}
-                  className="rounded-lg border border-white/10 px-2 py-1 text-xs text-zinc-300 hover:bg-white/5 disabled:opacity-50"
+                  className="rounded-lg border border-black/10 px-2 py-1 text-xs text-zinc-700 hover:bg-black/5 disabled:opacity-50 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5"
                 >
                   {isRestoring === s.id ? "Restoring..." : "Restore"}
                 </button>

@@ -69,7 +69,7 @@ export default function BoardDashboard() {
   if (!isLoaded) return null;
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] text-white">
+    <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-[#1a1a1a] dark:text-white">
       <Header />
       <div className="max-w-5xl mx-auto px-8 py-10">
         <div className="mb-10 flex items-center gap-3">
@@ -79,12 +79,12 @@ export default function BoardDashboard() {
             onChange={(e) => setNewBoardName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             placeholder="New board name..."
-            className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-all"
+            className="flex-1 rounded-xl border border-black/10 bg-black/5 px-4 py-3 text-sm text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus:border-indigo-500 dark:border-white/10 dark:bg-white/5 dark:text-white"
           />
           <select
             value={newBoardIsPublic ? "public" : "private"}
             onChange={(e) => setNewBoardIsPublic(e.target.value === "public")}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-white outline-none"
+            className="rounded-xl border border-black/10 bg-white px-3 py-3 text-sm text-zinc-900 outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
           >
             <option value="private">Private</option>
             <option value="public">Public</option>

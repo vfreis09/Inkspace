@@ -9,6 +9,7 @@ import ColorPicker from "@/features/boards/components/ColorPicker/ColorPicker";
 import { useStore } from "@/features/boards/store/useStore";
 import { RemoteCursor, usePartyKit } from "@/features/boards/hooks/usePartyKit";
 import LayerControls from "@/features/boards/components/LayerControls/LayerControls";
+import ThemeToggle from "@/features/boards/components/theme/ThemeToggle";
 
 
 const Canvas = dynamic(
@@ -162,7 +163,7 @@ export default function BoardPage({
     );
 
   return (
-    <main className="h-screen w-full overflow-hidden bg-[#fdfdfb] flex flex-col">
+    <main className="h-screen w-full overflow-hidden bg-zinc-100 dark:bg-[#161616] flex flex-col">
       <div className="relative flex-1">
         <div className="absolute left-4 top-4 z-20 flex items-center gap-3">
           <button
@@ -193,7 +194,9 @@ export default function BoardPage({
               <Send size={12} />
               INVITE WITH EMAIL
             </button>
-          </div>
+            <div className="h-6 w-px bg-white/10" />
+              <ThemeToggle />
+            </div>
         </div>
         {isGuest && (
           <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2">
