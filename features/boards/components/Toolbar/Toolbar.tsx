@@ -12,6 +12,8 @@ import {
   Palette,
   Trash2,
   Grid3x3,
+  Undo2,
+  Redo2,
 } from "lucide-react";
 import { useStore } from "@/features/boards/store/useStore";
 import type { Tool } from "@/features/boards/store/useStore";
@@ -32,6 +34,10 @@ export default function Toolbar({
   const showGrid = useStore((state) => state.showGrid);
   const toggleGrid = useStore((state) => state.toggleGrid);
   const toggleColorPicker = useStore((state) => state.toggleColorPicker);
+  const canUndo = useStore((state) => state.canUndo);
+  const canRedo = useStore((state) => state.canRedo);
+  const undoAndBroadcast = useStore((state) => state.undoAndBroadcast);
+  const redoAndBroadcast = useStore((state) => state.redoAndBroadcast);
 
   const tools: {
     id: Tool;
@@ -77,6 +83,33 @@ export default function Toolbar({
           </button>
         );
       })}
+      <div className="w-8 h-[1px] bg-white/10 my-1" />
+      <button
+        onClick={undoAndBroadcast}
+        disabled={!canEdit || !canUndo}
+        title="Undo (Ctrl+Z)"
+        className={cn(
+          "p-3 rounded-xl transition-all duration-200",
+          !canEdit || !canUndo
+            ? "text-gray-600 opacity-40 cursor-not-allowed"
+            : "text-gray-400 hover:bg-white/5 hover:text-gray-200",
+        )}
+      >
+        <Undo2 size={20} />
+      </button>
+      <button
+        onClick={redoAndBroadcast}
+        disabled={!canEdit || !canRedo}
+        title="Redo (Ctrl+Y)"
+        className={cn(
+          "p-3 rounded-xl transition-all duration-200",
+          !canEdit || !canRedo
+            ? "text-gray-600 opacity-40 cursor-not-allowed"
+            : "text-gray-400 hover:bg-white/5 hover:text-gray-200",
+        )}
+      >
+        <Redo2 size={20} />
+      </button>
       <div className="w-8 h-[1px] bg-white/10 my-1" />
       <button
         onClick={toggleColorPicker}

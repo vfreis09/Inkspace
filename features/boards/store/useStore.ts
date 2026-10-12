@@ -85,6 +85,11 @@ interface CanvasState {
   undo: () => Action | null;
   redo: () => Action | null;
 
+  broadcastHistory: ((action: Action, isUndo: boolean) => void) | null;
+  setBroadcastHistory: (fn: ((action: Action, isUndo: boolean) => void) | null) => void;
+  undoAndBroadcast: () => void;
+  redoAndBroadcast: () => void;
+
   addShapeFromRemote: (shape: Shape) => void;
   updateShapeFromRemote: (id: string, props: Partial<Shape>) => void;
   deleteShapesFromRemote: (ids: string[]) => void;
@@ -112,6 +117,18 @@ export const useStore = create<CanvasState>((set, get) => ({
   canRedo: false,
 
   broadcast: null,
+  broadcastHistory: null,
+  setBroadcastHistory: (fn) => set({ broadcastHistory: fn }),
+
+  undoAndBroadcast: () => {
+    const action = get().undo();
+    if (action) get().broadcastHistory?.(action, true);
+  },
+
+  redoAndBroadcast: () => {
+    const action = get().redo();
+    if (action) get().broadcastHistory?.(action, false);
+  },
   setBroadcast: (fn) => set({ broadcast: fn }),
 
   loadBoard: async (boardId: string) => {

@@ -82,11 +82,12 @@ export default function Canvas({
     selectedIds,
     selectShapes,
     brushSize,
-    undo,
-    redo,
     setBroadcast,
     reorderSelected,
     showGrid,
+    setBroadcastHistory,
+    undoAndBroadcast,
+    redoAndBroadcast,
   } = useStore();
 
   const { resolvedTheme } = useTheme();
@@ -147,7 +148,6 @@ export default function Canvas({
   editingTextRef.current = editingText;
 
   const [guides, setGuides] = useState<GuideLines>({ vertical: [], horizontal: [] });
-  const SNAP_THRESHOLD_PX = 8;
 
   const shiftSelectRef = useRef(false);
 
@@ -231,6 +231,11 @@ export default function Canvas({
     return () => setBroadcast(null);
   }, [setBroadcast, broadcastAction]);
 
+  useEffect(() => {
+    setBroadcastHistory(broadcastAction);
+    return () => setBroadcastHistory(null);
+  }, [setBroadcastHistory, broadcastAction]);
+
   const hasFocusedRef = useRef(false);
 
   useEffect(() => {
@@ -243,17 +248,6 @@ export default function Canvas({
       hasFocusedRef.current = false;
     }
   }, [editingText]);
-
-  const TOOL_SHORTCUTS: Record<string, Tool> = {
-    v: "select",
-    h: "pan",
-    r: "rect",
-    o: "circle",
-    l: "line",
-    a: "arrow",
-    p: "pen",
-    t: "text",
-  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -271,24 +265,17 @@ export default function Canvas({
         onShapeDelete?.(ids);
       }
 
-      if (
-        (e.ctrlKey || e.metaKey) &&
-        !e.shiftKey &&
-        e.key.toLowerCase() === "z"
-      ) {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        const action = undo();
-        if (action) broadcastAction(action, true);
+        undoAndBroadcast();
       }
 
       if (
         (e.ctrlKey || e.metaKey) &&
-        (e.key.toLowerCase() === "y" ||
-          (e.shiftKey && e.key.toLowerCase() === "z"))
+        (e.key.toLowerCase() === "y" || (e.shiftKey && e.key.toLowerCase() === "z"))
       ) {
         e.preventDefault();
-        const action = redo();
-        if (action) broadcastAction(action, false);
+        redoAndBroadcast();
       }
 
       if (canEdit && (e.ctrlKey || e.metaKey) && selectedIds.length > 0) {
@@ -354,10 +341,9 @@ export default function Canvas({
   }, [
     selectedIds,
     deleteShapesLocally,
-    undo,
-    redo,
+    undoAndBroadcast,
+    redoAndBroadcast,
     onShapeDelete,
-    broadcastAction,
     canEdit,
     reorderSelected,
     setTool,
@@ -757,8 +743,6 @@ export default function Canvas({
     setDrawStart(null);
   };
 
-  const CAMERA_PADDING_PX = 80;
-
   const handleResetCamera = useCallback(() => {
     setCamera({ x: 0, y: 0, scale: 1 });
   }, []);
@@ -798,11 +782,6 @@ export default function Canvas({
       y: size.height / 2 - boxCenterY * scale,
     });
   }, [shapes, size]);
-
-
-  const EXPORT_PADDING = 40;
-  const EXPORT_MAX_SIDE_PX = 8192;
-  const EXPORT_MAX_AREA_PX = 16_000_000;
 
   const handleExportPNG = useCallback(() => {
     const mainLayer = mainLayerRef.current;
