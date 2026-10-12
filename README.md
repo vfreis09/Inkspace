@@ -2,108 +2,147 @@
 
 > Real-time collaborative whiteboard for infinite creativity
 
-A production-grade collaborative canvas application where multiple users can draw, design, and brainstorm together in real-time. Built to showcase modern web development skills and distributed systems architecture.
+A collaborative canvas application where multiple users can draw, design, and brainstorm together in real time. Built to showcase modern full-stack web development and real-time architecture.
 
 ## 🎯 What It Is
 
-Inkspace is a web-based infinite canvas tool built from the ground up to handle complex real-time interactions. Unlike wrapper-based solutions, Inkspace implements its own rendering logic to ensure maximum control over the user experience.
+Inkspace is a web-based infinite canvas built on Konva. It implements its own interaction layer (selection, transforms, snapping, layering, undo/redo) and its own real-time sync protocol instead of wrapping an existing whiteboard product.
 
-- Custom Drawing Engine: Built on HTML5 Canvas for high-performance rendering.
-- Multiplayer Sync: Real-time collaboration with conflict-free data synchronization.
-- Presence: Live cursors and user activity indicators.
-- Infinite Canvas: Advanced panning and zooming capabilities.
-- State Management: Robust undo/redo and shape serialization.
+- **Custom canvas engine:** shapes, pen, text, selection, transforms and layering built on Konva.js.
+- **Multiplayer sync:** real-time shape updates broadcast over WebSockets (Partykit) and persisted to PostgreSQL. Conflicts are resolved last-write-wins per shape property.
+- **Presence:** live cursors with user names and an online-users indicator.
+- **Infinite canvas:** pan and zoom with a live coordinate/zoom HUD, home and zoom-to-fit controls.
+- **Permissions:** owner, editor and viewer roles, invite links, email invites, and guest access on public boards.
+- **Version history:** automatic board snapshots that the owner can restore.
+- **Dark and light themes** across the whole app.
 
 ## 🚀 Tech Stack
 
 ### Frontend
 
-- **Next.js 16** (App Router) - React framework with SSR and API routes
-- **TypeScript** - Type-safe development
-- **Konva.js** - 2D Canvas framework used to build the custom rendering engine.
-- **Zustand** - Lightweight state management
-- **TailwindCSS** - Utility-first styling
-- **Shadcn/ui** - Accessible component library
+- **Next.js 16** (App Router)
+- **React 19** with the React Compiler enabled
+- **TypeScript**
+- **Konva / react-konva** - 2D canvas rendering
+- **Zustand** - state management (with Immer for color updates)
+- **Tailwind CSS v4** and **shadcn/ui**
+- **next-themes** - light/dark theming
+- **lucide-react** - icons
 
 ### Backend
 
-- **Next.js API Routes** - Serverless API endpoints
-- **Prisma** - Type-safe database ORM
-- **PostgreSQL** - Relational database (Vercel Postgres / Supabase)
+- **Next.js API routes** (route handlers plus controller/service layers)
+- **Prisma** ORM
+- **PostgreSQL** hosted on **Neon**
 
 ### Real-Time
 
-- **Partykit** - WebSocket infrastructure for real-time collaboration
+- **Partykit** - WebSocket rooms for shape sync, cursors and presence. The server batches edits and flushes them to the database through an authenticated API endpoint.
 
 ### Auth
 
-- **Clerk** - Authentication and user management
-
-### Storage
-
-- **Vercel Blob** / **Cloudflare R2** - File storage for exports and snapshots
+- **Clerk** - authentication (modal sign-in) and user management. Board permissions use short-lived signed tokens for the WebSocket connection.
 
 ### Deployment
 
-- **Vercel** - Frontend and API hosting
-- **Partykit** - Real-time server hosting
+- **Vercel** - frontend and API
+- **Partykit** - real-time server
 
-## 🏗️ Project Architecture
+## 🏗️ Architecture
 
-Inkspace uses a Layered Canvas Architecture to optimize performance:
+- **Canvas layer (Konva):** renders shapes sorted by an explicit `order` value, plus the grid, snap guides, selection box and transformer.
+- **State layer (Zustand):** shapes, selection, tool state and a custom action history (`ADD`, `UPDATE`, `UPDATE_BATCH`, `DELETE`) that powers undo/redo. Every local action is also broadcast.
+- **Sync layer (Partykit):** a room per board relays shape add/update/delete messages, enforces roles server-side, and debounces writes to the database. Periodic snapshots are created for version history.
+- **Persistence layer (Prisma + Postgres):** boards, members, shapes and snapshots.
 
-- The Grid Layer: Constant reference for infinite panning.
-- The Interaction Layer: Handles active selections and transformations.
-- The Sync Layer: Manages Yjs updates and Partykit WebSocket broadcasts.
+## ✨ Features
 
-## 🎯 Core Features
+### Canvas
 
-### Phase 1: Canvas Basics ✅
+- Infinite canvas with pan and zoom
+- Shapes: rectangle, circle, line, arrow, free-hand pen, text
+- Select, move, resize and rotate, with multi-select (shift-click and drag-select)
+- Undo / redo, including multi-shape actions
+- Layer ordering: bring to front, send to back, forward, backward
+- Smart alignment guides with snapping while dragging
+- Color picker with fill, stroke and brush size
+- Home (reset view) and zoom-to-fit controls
+- Coordinate and zoom HUD
+- Grid toggle
+- Clear board
+- Export as PNG (framed to content, matches the current theme)
 
-- Infinite canvas with pan/zoom
-- Basic shapes (rectangle, circle, line, arrow)
-- Selection, move, resize, rotate
-- Undo/redo
-- Delete shapes
+### Keyboard shortcuts
 
-### Phase 2: Real-Time Multiplayer 🚧
+| Shortcut | Action |
+|---|---|
+| V / H / R / O / L / A / P / T | Select, pan, rectangle, circle, line, arrow, pen, text |
+| Delete / Backspace | Delete selection |
+| Ctrl+Z / Ctrl+Y (or Ctrl+Shift+Z) | Undo / redo |
+| Ctrl+A | Select all |
+| Escape | Deselect |
+| Arrow keys (Shift for 10px) | Nudge selection |
+| Ctrl+] / Ctrl+[ | Bring forward / send backward |
+| Ctrl+Shift+] / Ctrl+Shift+[ | Bring to front / send to back |
 
-- Multiple users on same board
-- Live cursors with user names
-- Real-time shape synchronization
+### Collaboration
+
+- Multiple users on the same board in real time
+- Live cursors with names and colors
 - Presence indicators
+- Share by link or invite by email
+- Roles: owner, editor, viewer
+- Guest access for public boards
+- Owner can change roles, remove members and restore snapshots
 
-### Phase 3: Collaboration Features 📋
+## 🗺️ Roadmap
 
-- Share board with link
-- Permission management (view/edit)
+### Done ✅
+
+- **Canvas basics:** pan/zoom, shapes, selection and transforms, undo/redo
+- **Multiplayer:** shared boards, live cursors, real-time sync, presence
+- **Collaboration:** sharing, permissions, snapshots / version history
+- **Advanced tools:** pen, text, layers, alignment guides
+- **Polish:** keyboard shortcuts, PNG export, dark mode, zoom-to-fit, coordinate HUD
+
+### In progress 🚧
+
+- **Performance optimization:** viewport culling, layer separation, render isolation for cursors and HUD, batched database writes. Benchmarks will be added here. <!-- TODO: fill in before/after numbers -->
+
+### Planned 📋
+
+- Group / ungroup shapes
 - Real-time comments
-- Board snapshots/version history
+- Undo/redo buttons in the toolbar
+- Replace browser alerts and prompts with modals
+- Unit tests for layer, snapping and culling logic
 
-### Phase 4: Advanced Tools 📋
+### Intentionally out of scope
 
-- Free-hand drawing (pen tool)
-- Text tool
-- Layers/z-index management
-- Group/ungroup shapes
-- Alignment guides
-
-### Phase 5: Export & Polish 📋
-
-- Export as PNG/SVG/PDF
-- Keyboard shortcuts
-- Dark mode
-- Performance optimization
+- SVG and PDF export (PNG covers the use case)
+- Brush-style eraser (Delete covers the use case)
+- Right-click context menu (every action is already reachable elsewhere)
 
 ## 🎯 Goals
 
 This project demonstrates:
 
-- Real-time distributed systems architecture
-- Complex state management in collaborative environments
-- Performance optimization for canvas rendering
-- Production-ready authentication and permissions
+- Real-time architecture with WebSockets and server-side permission checks
+- State management for collaborative editing, including undo/redo that also syncs
+- Canvas rendering and interaction design (snapping, transforms, layering)
+- Authentication and role-based access control
 - Modern full-stack TypeScript development
+
+## ⚠️ Known limitations
+
+- Concurrent edits to the same property of the same shape resolve last-write-wins; there is no CRDT.
+- Undo/redo history is local to each user and is cleared on reload.
+- Alignment guides snap against the dragged shape only, not the bounding box of a multi-selection.
+- Rect-select and bounding boxes don't account for rotation.
+
+## 🛠️ Getting Started
+
+<!-- TODO: add your setup steps: env vars (DATABASE_URL, Clerk keys, PARTYKIT_SECRET, NEXT_PUBLIC_PARTYKIT_HOST, NEXT_PUBLIC_APP_URL), prisma migrate, running Next.js and Partykit dev servers -->
 
 ## 📝 License
 
