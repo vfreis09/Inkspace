@@ -10,6 +10,7 @@ import { useStore } from "@/features/boards/store/useStore";
 import { RemoteCursor, usePartyKit } from "@/features/boards/hooks/usePartyKit";
 import LayerControls from "@/features/boards/components/LayerControls/LayerControls";
 import ThemeToggle from "@/features/boards/components/theme/ThemeToggle";
+import { installStressTools } from "@/features/boards/utils/devStress";
 
 
 const Canvas = dynamic(
@@ -126,6 +127,10 @@ export default function BoardPage({
     deleteShapesLocally(ids);
     sendShapeDelete(ids);
   };
+
+  useEffect(() => {
+    installStressTools();
+  }, []);
 
   if (boardError) {
     return (
