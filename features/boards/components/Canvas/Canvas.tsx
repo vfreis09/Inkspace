@@ -696,7 +696,7 @@ export default function Canvas({
             const lastY = points[points.length - 1];
             const dist = Math.hypot(relX - lastX, relY - lastY);
 
-            if (dist < 3) return prev; // throttle: skip points that are too close together
+            if (dist < 1.5 / camera.scale) return prev;
 
             return { ...prev, points: [...points, relX, relY] };
           });
