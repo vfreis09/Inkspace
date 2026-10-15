@@ -4,6 +4,8 @@
 
 A collaborative canvas application where multiple users can draw, design, and brainstorm together in real time. Built to showcase modern full-stack web development and real-time architecture.
 
+<!-- TODO: add a screenshot or GIF of the board here -->
+
 ## 🎯 What It Is
 
 Inkspace is a web-based infinite canvas built on Konva. It implements its own interaction layer (selection, transforms, snapping, layering, undo/redo) and its own real-time sync protocol instead of wrapping an existing whiteboard product.
@@ -47,6 +49,7 @@ Inkspace is a web-based infinite canvas built on Konva. It implements its own in
 
 - **Vercel** - frontend and API
 - **Partykit** - real-time server
+- **Neon** - serverless PostgreSQL
 
 ## 🏗️ Architecture
 
@@ -62,7 +65,7 @@ Inkspace is a web-based infinite canvas built on Konva. It implements its own in
 - Infinite canvas with pan and zoom
 - Shapes: rectangle, circle, line, arrow, free-hand pen, text
 - Select, move, resize and rotate, with multi-select (shift-click and drag-select)
-- Undo / redo, including multi-shape actions
+- Undo / redo, including multi-shape actions (keyboard shortcuts and toolbar buttons)
 - Layer ordering: bring to front, send to back, forward, backward
 - Smart alignment guides with snapping while dragging
 - Color picker with fill, stroke and brush size
@@ -99,7 +102,7 @@ Inkspace is a web-based infinite canvas built on Konva. It implements its own in
 
 ### Done ✅
 
-- **Canvas basics:** pan/zoom, shapes, selection and transforms, undo/redo
+- **Canvas basics:** pan/zoom, shapes, selection and transforms, undo/redo (shortcuts and toolbar buttons)
 - **Multiplayer:** shared boards, live cursors, real-time sync, presence
 - **Collaboration:** sharing, permissions, snapshots / version history
 - **Advanced tools:** pen, text, layers, alignment guides
@@ -107,13 +110,12 @@ Inkspace is a web-based infinite canvas built on Konva. It implements its own in
 
 ### In progress 🚧
 
-- **Performance optimization:** viewport culling, layer separation, render isolation for cursors and HUD, batched database writes. Benchmarks will be added here. <!-- TODO: fill in before/after numbers -->
+- **Performance optimization:** viewport culling, layer separation, render isolation, batched database writes. Baseline numbers are in the Performance section below.
 
 ### Planned 📋
 
 - Group / ungroup shapes
 - Real-time comments
-- Undo/redo buttons in the toolbar
 - Replace browser alerts and prompts with modals
 - Unit tests for layer, snapping and culling logic
 
@@ -122,6 +124,24 @@ Inkspace is a web-based infinite canvas built on Konva. It implements its own in
 - SVG and PDF export (PNG covers the use case)
 - Brush-style eraser (Delete covers the use case)
 - Right-click context menu (every action is already reachable elsewhere)
+
+## 📈 Performance
+
+Baseline measured before the optimization work, on a production build.
+
+**Setup:** AMD Ryzen 5 5600G, 32 GB RAM, Chrome 150.0.7871.114 (64-bit), `npm run build && npm run start`.
+FPS read from Chrome DevTools > Rendering > Frame Rendering Stats, single run per cell, so values are approximate.
+Test shapes come from a dev-only stress tool: a random mix of rectangles, circles, lines, arrows and freehand strokes (82 points each, the heaviest shape type), spread over ±4000 world units.
+
+| Scenario (FPS) | 0 shapes | 1,000 shapes | 2,000 shapes |
+|---|---|---|---|
+| Wheel zoom | 50 | 25 | 17 |
+| Pan | 49 | 40 | 36 |
+| Drag one shape | 58 | 48 | 28 |
+
+An empty board already runs at about 50 FPS on zoom and pan, so part of the cost is independent of shape count.
+
+After-optimization numbers will be added here once the work is done.
 
 ## 🎯 Goals
 
@@ -139,10 +159,77 @@ This project demonstrates:
 - Undo/redo history is local to each user and is cleared on reload.
 - Alignment guides snap against the dragged shape only, not the bounding box of a multi-selection.
 - Rect-select and bounding boxes don't account for rotation.
+- Large boards (1,000+ shapes) are slow while performance work is in progress; see the Performance section.
 
 ## 🛠️ Getting Started
 
-<!-- TODO: add your setup steps: env vars (DATABASE_URL, Clerk keys, PARTYKIT_SECRET, NEXT_PUBLIC_PARTYKIT_HOST, NEXT_PUBLIC_APP_URL), prisma migrate, running Next.js and Partykit dev servers -->
+### Prerequisites
+
+- Node.js 20 or newer
+- A PostgreSQL database (the project uses [Neon](https://neon.tech))
+- A [Clerk](https://clerk.com) application
+- A [Partykit](https://partykit.io) project (or the local dev server)
+
+### 1. Install
+
+```bash
+git clone <https://github.com/vfreis09/Inkspace>
+cd inkspace
+npm install
+```
+
+### 2. Environment variables
+
+Create a `.env` file in the project root:
+
+```bash
+# Database (use Neon's pooled connection string; the host contains "-pooler")
+DATABASE_URL=
+
+# Clerk
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
+CLERK_SECRET_KEY=
+
+# Partykit
+NEXT_PUBLIC_PARTYKIT_HOST=localhost:1999
+PARTYKIT_HOST=http://localhost:1999
+PARTYKIT_SECRET=
+
+# App URL (used by the Partykit server to call the API)
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+Variable names are taken from the code. Check the Clerk dashboard for the exact key names your version expects.
+
+### 3. Database
+
+```bash
+npx prisma migrate dev
+```
+
+### 4. Run
+
+Start both servers in separate terminals:
+
+```bash
+# Next.js app
+npm run dev
+
+# Partykit real-time server
+npx partykit dev
+```
+
+Open http://localhost:3000.
+
+### Optional: stress-test tool (development only)
+
+To load many shapes locally for performance testing, add this to `.env`:
+
+```bash
+NEXT_PUBLIC_ENABLE_STRESS=true
+```
+
+Then run `stress(1000)` in the browser console on a board, and `stressClear()` to remove them. Shapes are local only and are never saved or broadcast. Do not set this variable in production.
 
 ## 📝 License
 
