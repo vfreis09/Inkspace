@@ -25,6 +25,8 @@ import { Download, Home, Maximize } from "lucide-react";
 import Konva from "konva";
 import { useTheme } from "next-themes";
 import { CANVAS_THEME } from "@/features/boards/utils/canvasTheme";
+import { isShapeInViewport } from "@/features/boards/utils/viewportCulling";
+import { createExportNode } from "@/features/boards/utils/exportNodes";
 
 
 export type RemoteCursor = {
@@ -62,6 +64,7 @@ const CAMERA_PADDING_PX = 80;
 const EXPORT_PADDING = 40;
 const EXPORT_MAX_SIDE_PX = 8192;
 const EXPORT_MAX_AREA_PX = 16_000_000;
+const CULL_PADDING_PX = 200;
 
 export default function Canvas({
   onCursorMove,
@@ -141,6 +144,13 @@ export default function Canvas({
     value: string;
     fontSize: number;
   } | null>(null);
+
+  const visibleShapes = useMemo(() => {
+    const keep = new Set(selectedIds);
+    if (editingText?.id) keep.add(editingText.id);
+    const pad = CULL_PADDING_PX / camera.scale;
+    return orderedShapes.filter((s) => keep.has(s.id) || isShapeInViewport(s, viewport, pad));
+  }, [orderedShapes, viewport, selectedIds, editingText?.id, camera.scale]);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -784,16 +794,17 @@ export default function Canvas({
   }, [shapes, size]);
 
   const handleExportPNG = useCallback(() => {
-    const mainLayer = mainLayerRef.current;
-    if (!mainLayer || shapes.length === 0) return;
-
-    const shapeIds = new Set(shapes.map((s) => s.id));
-    const nodes = mainLayer.getChildren((n) => shapeIds.has(n.id()));
+    const nodes = orderedShapes
+      .map(createExportNode)
+      .filter((n): n is Konva.Shape => !!n);
     if (nodes.length === 0) return;
+
+    const exportLayer = new Konva.Layer();
+    nodes.forEach((n) => exportLayer.add(n));
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     nodes.forEach((n) => {
-      const r = n.getClientRect({ skipStroke: true, relativeTo: mainLayer });
+      const r = n.getClientRect({ skipStroke: true, relativeTo: exportLayer });
       minX = Math.min(minX, r.x);
       minY = Math.min(minY, r.y);
       maxX = Math.max(maxX, r.x + r.width);
@@ -804,6 +815,15 @@ export default function Canvas({
     const originY = minY - EXPORT_PADDING;
     const worldW = Math.max(maxX - minX, 1) + EXPORT_PADDING * 2;
     const worldH = Math.max(maxY - minY, 1) + EXPORT_PADDING * 2;
+
+    nodes.forEach((n) => {
+      n.x(n.x() - originX);
+      n.y(n.y() - originY);
+    });
+
+    const bg = new Konva.Rect({ x: 0, y: 0, width: worldW, height: worldH, fill: palette.bg, listening: false });
+    exportLayer.add(bg);
+    bg.moveToBottom();
 
     const pr = Math.min(
       2,
@@ -817,24 +837,8 @@ export default function Canvas({
       height: Math.ceil(worldH * pr),
     });
     exportStage.scale({ x: pr, y: pr });
-
-    const exportLayer = new Konva.Layer();
     exportLayer.getCanvas().setPixelRatio(1);
     exportStage.add(exportLayer);
-
-    exportLayer.add(
-      new Konva.Rect({ x: 0, y: 0, width: worldW, height: worldH, fill: palette.bg, listening: false }),
-    );
-
-    const k = camera.scale;
-    nodes.forEach((n) => {
-      const c = n.clone({ x: n.x() - originX, y: n.y() - originY, draggable: false });
-      ["strokeWidth", "cornerRadius", "pointerLength", "pointerWidth"].forEach((attr) => {
-        const v = c.getAttr(attr);
-        if (typeof v === "number") c.setAttr(attr, v * k);
-      });
-      exportLayer.add(c);
-    });
 
     exportStage
       .toBlob({ pixelRatio: 1 })
@@ -852,7 +856,7 @@ export default function Canvas({
         alert("Export failed. Try again, or zoom in closer to your shapes.");
       })
       .finally(() => exportStage.destroy());
-  }, [shapes, camera.scale, palette.bg]);
+  }, [orderedShapes, palette.bg]);
 
   if (size.width === 0) return null;
 
@@ -935,7 +939,7 @@ export default function Canvas({
               listening={false}
             />
           )}
-          {orderedShapes.map((s) => (
+          {visibleShapes.map((s) => (
             <MemoizedShape
               key={s.id}
               shape={s}
