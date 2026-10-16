@@ -40,13 +40,12 @@ export default function BoardPage({
   const boardId = resolvedParams.boardId;
   
 
-  const {
-    loadBoard,
-    isBoardLoading,
-    boardError,
-    isColorPickerOpen,
-    toggleColorPicker,
-  } = useStore();
+  const loadBoard = useStore((s) => s.loadBoard);
+  const isBoardLoading = useStore((s) => s.isBoardLoading);
+  const boardError = useStore((s) => s.boardError);
+  const isColorPickerOpen = useStore((s) => s.isColorPickerOpen);
+  const toggleColorPicker = useStore((s) => s.toggleColorPicker);
+
   const [remoteCursors, setRemoteCursors] = useState<RemoteCursor[]>([]);
 
   const {
@@ -116,10 +115,11 @@ export default function BoardPage({
     }
   };
 
-  const shapes = useStore((s) => s.shapes);
+  const hasShapes = useStore((s) => s.shapes.length > 0);
   const deleteShapesLocally = useStore((s) => s.deleteShapesLocally);
 
   const handleClearBoard = () => {
+    const { shapes } = useStore.getState();
     if (!canEdit || shapes.length === 0) return;
     if (!window.confirm("Clear the entire board? This can be undone with Ctrl+Z.")) return;
 
@@ -259,7 +259,7 @@ export default function BoardPage({
         <Toolbar
           canEdit={canEdit}
           onClearBoard={handleClearBoard}
-          hasShapes={shapes.length > 0}
+          hasShapes={hasShapes}
         />
         <LayerControls canEdit={canEdit} />
         {isColorPickerOpen && canEdit && (

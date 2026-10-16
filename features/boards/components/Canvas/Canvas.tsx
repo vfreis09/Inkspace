@@ -76,24 +76,24 @@ export default function Canvas({
   cursors,
   canEdit = true,
 }: CanvasProps) {
-  const {
-    shapes,
-    addShapeLocally,
-    updateShapeLocally,
-    updateShapesBatchLocally,
-    deleteShapesLocally,
-    currentTool,
-    setTool,
-    selectedIds,
-    selectShapes,
-    brushSize,
-    setBroadcast,
-    reorderSelected,
-    showGrid,
-    setBroadcastHistory,
-    undoAndBroadcast,
-    redoAndBroadcast,
-  } = useStore();
+  const shapes = useStore((s) => s.shapes);
+  const selectedIds = useStore((s) => s.selectedIds);
+  const currentTool = useStore((s) => s.currentTool);
+  const brushSize = useStore((s) => s.brushSize);
+  const showGrid = useStore((s) => s.showGrid);
+  const activeFill = useStore((s) => s.activeFill);
+
+  const addShapeLocally = useStore((s) => s.addShapeLocally);
+  const updateShapeLocally = useStore((s) => s.updateShapeLocally);
+  const updateShapesBatchLocally = useStore((s) => s.updateShapesBatchLocally);
+  const deleteShapesLocally = useStore((s) => s.deleteShapesLocally);
+  const setTool = useStore((s) => s.setTool);
+  const selectShapes = useStore((s) => s.selectShapes);
+  const setBroadcast = useStore((s) => s.setBroadcast);
+  const reorderSelected = useStore((s) => s.reorderSelected);
+  const setBroadcastHistory = useStore((s) => s.setBroadcastHistory);
+  const undoAndBroadcast = useStore((s) => s.undoAndBroadcast);
+  const redoAndBroadcast = useStore((s) => s.redoAndBroadcast);
 
   const { resolvedTheme } = useTheme();
   const palette = CANVAS_THEME[resolvedTheme === "dark" ? "dark" : "light"];
@@ -1081,7 +1081,7 @@ export default function Canvas({
             fontSize: Math.min(Math.max(editingText.fontSize * camera.scale, 8), 120),
             lineHeight: 1,
             fontFamily: "Arial, sans-serif",
-            color: useStore.getState().activeFill,
+            color: activeFill,
             padding: 0,
             margin: 0,
             width: `${Math.max(...editingText.value.split("\n").map((l) => l.length), 1) + 1}ch`,
