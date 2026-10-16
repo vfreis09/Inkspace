@@ -27,6 +27,7 @@ import { useTheme } from "next-themes";
 import { CANVAS_THEME } from "@/features/boards/utils/canvasTheme";
 import { isShapeInViewport } from "@/features/boards/utils/viewportCulling";
 import { createExportNode } from "@/features/boards/utils/exportNodes";
+import CanvasHud, { type CanvasHudHandle } from "@/features/boards/components/CanvasHud/CanvasHud";
 
 
 export type RemoteCursor = {
@@ -161,7 +162,7 @@ export default function Canvas({
 
   const shiftSelectRef = useRef(false);
 
-  const [worldPointer, setWorldPointer] = useState({ x: 0, y: 0 });
+  const hudRef = useRef<CanvasHudHandle>(null);
 
   useEffect(() => {
     const check = () =>
@@ -672,7 +673,7 @@ export default function Canvas({
     
     const pos = getPointerPosition(stage);
 
-    setWorldPointer(pos);
+    hudRef.current?.setPointer(pos.x, pos.y);
 
     onCursorMove?.(pos.x, pos.y);
 
@@ -1085,13 +1086,7 @@ export default function Canvas({
           }}
         />
       )}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-lg border border-white/10 bg-zinc-900/90 px-3 py-1.5 text-[11px] font-mono text-zinc-400 backdrop-blur-md">
-        <span>{Math.round(camera.scale * 100)}%</span>
-        <span className="text-zinc-700">|</span>
-        <span>
-          x: {Math.round(worldPointer.x)}, y: {Math.round(worldPointer.y)}
-        </span>
-      </div>
+      <CanvasHud ref={hudRef} scale={camera.scale} />
     </div>
   );
 }
