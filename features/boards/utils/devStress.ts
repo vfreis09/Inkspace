@@ -43,14 +43,16 @@ export function installStressTools() {
   if (typeof window === "undefined") return;
   if (process.env.NEXT_PUBLIC_ENABLE_STRESS !== "true") return;
 
-  (window as any).stress = (count = 1000, spread = 4000) => {
+  const w = window as unknown as Record<string, unknown>;
+
+  w.stress = (count = 1000, spread = 4000) => {
     const start = useStore.getState().getNextOrder();
     const added = Array.from({ length: count }, (_, i) => makeShape(start + i, spread));
     useStore.setState((s) => ({ shapes: [...s.shapes, ...added] }));
     console.log(`Added ${count} stress shapes (spread ±${spread})`);
   };
 
-  (window as any).stressClear = () => {
+  w.stressClear = () => {
     useStore.setState((s) => ({
       shapes: s.shapes.filter((sh) => !sh.id.startsWith("stress-")),
       selectedIds: [],

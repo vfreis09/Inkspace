@@ -9,7 +9,7 @@ type Box = { left: number; top: number; right: number; bottom: number };
 const boxCache = new WeakMap<Shape, Box>();
 
 function computeBox(shape: Shape): Box {
-  let b = getShapeBounds(shape);
+  const b = getShapeBounds(shape);
   let { left, right, top, bottom } = b;
 
   if (shape.type === "text") {

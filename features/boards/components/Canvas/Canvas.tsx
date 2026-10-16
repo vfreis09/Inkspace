@@ -3,6 +3,7 @@
 import React, {
   useState,
   useEffect,
+  useLayoutEffect,
   useRef,
   useMemo,
   useCallback,
@@ -156,7 +157,9 @@ export default function Canvas({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const editingTextRef = useRef(editingText);
-  editingTextRef.current = editingText;
+  useLayoutEffect(() => {
+    editingTextRef.current = editingText;
+  }, [editingText]);
 
   const [guides, setGuides] = useState<GuideLines>({ vertical: [], horizontal: [] });
 

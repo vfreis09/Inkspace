@@ -165,7 +165,7 @@ export const useStore = create<CanvasState>((set, get) => ({
 
   setTargetColor: (color, overrideTarget) => {
     const target = overrideTarget ?? get().activeTarget;
-    const { selectedIds, shapes, history } = get();
+    const { selectedIds, shapes } = get();
 
     const updates = selectedIds
       .map((id) => {

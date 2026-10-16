@@ -1,13 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { isShapeInViewport } from "./viewportCulling";
+import type { Shape } from "../store/useStore";
 
 const vp = { left: 0, top: 0, right: 100, bottom: 100 };
 
-const make = (over: Record<string, unknown> = {}) =>
+const make = (over: Record<string, unknown> = {}): Shape =>
   ({
     id: "a", type: "rect", order: 1, x: 10, y: 10, width: 20, height: 20,
     rotation: 0, fill: "#000", stroke: "#000", strokeWidth: 3, ...over,
-  }) as any;
+  }) as unknown as Shape;
 
 describe("isShapeInViewport", () => {
   it("keeps a shape fully inside", () => {
