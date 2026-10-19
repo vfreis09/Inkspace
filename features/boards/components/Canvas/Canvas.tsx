@@ -113,7 +113,6 @@ export default function Canvas({
 
   const stageRef = useRef<KonvaStage | null>(null);
   const trRef = useRef<KonvaTransformer | null>(null);
-  const mainLayerRef = useRef<Konva.Layer | null>(null);
 
   const dynamicGridScale = useMemo(
     () => Math.pow(2, Math.floor(Math.log2(1 / camera.scale))),
@@ -929,7 +928,7 @@ export default function Canvas({
         }
         style={{ cursor: currentTool === "pan" ? "grab" : "default" }}
       >
-        <Layer ref={mainLayerRef}>
+        <Layer listening={false}>
           {gridImage && showGrid && (
             <Rect
               x={-camera.x / camera.scale}
@@ -943,6 +942,8 @@ export default function Canvas({
               listening={false}
             />
           )}
+        </Layer>
+        <Layer>
           {visibleShapes.map((s) => (
             <MemoizedShape
               key={s.id}
@@ -959,6 +960,8 @@ export default function Canvas({
               onDblClick={handleTextDblClick}
             />
           ))}
+        </Layer>
+        <Layer>
           {guides.vertical.map((x) => (
             <Line
               key={`v-${x}`}
