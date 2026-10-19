@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, use } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { User, Globe, LayoutDashboard, ChevronLeft, Send } from "lucide-react";
 import Toolbar from "@/features/boards/components/Toolbar/Toolbar";
 import ColorPicker from "@/features/boards/components/ColorPicker/ColorPicker";
 import { useStore } from "@/features/boards/store/useStore";
-import { RemoteCursor, usePartyKit } from "@/features/boards/hooks/usePartyKit";
+import { usePartyKit } from "@/features/boards/hooks/usePartyKit";
 import LayerControls from "@/features/boards/components/LayerControls/LayerControls";
 import ThemeToggle from "@/features/boards/components/theme/ThemeToggle";
 import { installStressTools } from "@/features/boards/utils/devStress";
+import { useCursorStore } from "@/features/boards/store/useCursorStore";
 
 
 const Canvas = dynamic(
@@ -46,7 +47,7 @@ export default function BoardPage({
   const isColorPickerOpen = useStore((s) => s.isColorPickerOpen);
   const toggleColorPicker = useStore((s) => s.toggleColorPicker);
 
-  const [remoteCursors, setRemoteCursors] = useState<RemoteCursor[]>([]);
+  const setCursors = useCursorStore((s) => s.setCursors);
 
   const {
     activeUsers,
@@ -59,7 +60,7 @@ export default function BoardPage({
     setGuestName,
     canEdit,
     wasKicked,
-  } = usePartyKit(boardId, setRemoteCursors);
+  } = usePartyKit(boardId, setCursors);
 
   useEffect(() => {
     if (wasKicked) {
@@ -131,6 +132,10 @@ export default function BoardPage({
   useEffect(() => {
     installStressTools();
   }, []);
+
+   useEffect(() => {
+    return () => useCursorStore.getState().setCursors([]);
+  }, [boardId]);
 
   if (boardError) {
     return (
@@ -268,7 +273,6 @@ export default function BoardPage({
         </div>
         )}
         <Canvas
-          cursors={remoteCursors}
           onCursorMove={sendCursor}
           onShapeAdd={sendShapeAdd}
           onShapeUpdate={sendShapeUpdate}

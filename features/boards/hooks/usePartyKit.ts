@@ -58,8 +58,9 @@ export function usePartyKit(
   const lastCursorPositionRef = useRef<{ x: number; y: number } | null>(null);
   const cursorFrameRef = useRef<number | null>(null);
 
-  const { addShapeFromRemote, updateShapeFromRemote, deleteShapesFromRemote } =
-    useStore();
+  const addShapeFromRemote = useStore((s) => s.addShapeFromRemote);
+  const updateShapeFromRemote = useStore((s) => s.updateShapeFromRemote);
+  const deleteShapesFromRemote = useStore((s) => s.deleteShapesFromRemote);
 
   const guestIdentity = useMemo(() => {
     if (typeof window === "undefined") return null;
@@ -90,22 +91,21 @@ export function usePartyKit(
     [guestIdentity],
   );
 
-  const emitPresence = useCallback(() => {
-    const allCursors = Array.from(cursorsRef.current.values());
-
+  const emitCursors = useCallback(() => {
     const byUser = new Map<string, RemoteCursor>();
-    for (const c of allCursors) {
-      byUser.set(c.userId, c);
-    }
-    const uniqueUsers = Array.from(byUser.values());
-
-    const othersOnly = uniqueUsers.filter(
+    for (const c of cursorsRef.current.values()) byUser.set(c.userId, c);
+    const othersOnly = Array.from(byUser.values()).filter(
       (c) => (userId && c.userId !== userId) || !userId,
     );
-
     onCursorUpdate(othersOnly);
-    setActiveUsers(uniqueUsers);
   }, [onCursorUpdate, userId]);
+
+  const emitPresence = useCallback(() => {
+    const byUser = new Map<string, RemoteCursor>();
+    for (const c of cursorsRef.current.values()) byUser.set(c.userId, c);
+    setActiveUsers(Array.from(byUser.values()));
+    emitCursors();
+  }, [emitCursors]);
 
   useEffect(() => {
     if (!boardId || !userId) return;
@@ -188,7 +188,7 @@ export function usePartyKit(
             existing.x = msg.x;
             existing.y = msg.y;
           }
-          emitPresence();
+          emitCursors();
           break;
 
         case "shape:add":
@@ -227,11 +227,11 @@ export function usePartyKit(
     }
 
       connect();
-  return () => { cancelled = true; 
-    localSocket?.close(); 
-    cursorsRef.current.clear();
-    socketRef.current?.close(); };
-}, [boardId, userId, addShapeFromRemote, updateShapeFromRemote, deleteShapesFromRemote, emitPresence]);
+      return () => { cancelled = true; 
+        localSocket?.close(); 
+        cursorsRef.current.clear();
+        socketRef.current?.close(); };
+    }, [boardId, userId, addShapeFromRemote, updateShapeFromRemote, deleteShapesFromRemote, emitPresence, emitCursors]);
 
   const flushCursor = useCallback(() => {
     if (!socketRef.current || !lastCursorPositionRef.current) {

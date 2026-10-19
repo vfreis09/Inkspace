@@ -8,7 +8,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
-import { Stage, Layer, Rect, Transformer, Group, Path, Text, Line } from "react-konva";
+import { Stage, Layer, Rect, Transformer, Line } from "react-konva";
 import { useStore } from "@/features/boards/store/useStore";
 import type {
   Shape,
@@ -29,23 +29,13 @@ import { CANVAS_THEME } from "@/features/boards/utils/canvasTheme";
 import { isShapeInViewport } from "@/features/boards/utils/viewportCulling";
 import { createExportNode } from "@/features/boards/utils/exportNodes";
 import CanvasHud, { type CanvasHudHandle } from "@/features/boards/components/CanvasHud/CanvasHud";
-
-
-export type RemoteCursor = {
-  connectionId: string;
-  userId: string;
-  name: string;
-  color: string;
-  x: number;
-  y: number;
-};
+import RemoteCursorsLayer from "@/features/boards/components/RemoteCursorsLayer/RemoteCursorsLayer";
 
 type CanvasProps = {
   onCursorMove?: (x: number, y: number) => void;
   onShapeAdd?: (shape: Shape) => void;
   onShapeUpdate?: (shapeId: string, props: Partial<Shape>) => void;
   onShapeDelete?: (ids: string[]) => void;
-  cursors: RemoteCursor[];
   canEdit?: boolean;
 };
 
@@ -73,7 +63,6 @@ export default function Canvas({
   onShapeAdd,
   onShapeUpdate,
   onShapeDelete,
-  cursors,
   canEdit = true,
 }: CanvasProps) {
   const shapes = useStore((s) => s.shapes);
@@ -1016,43 +1005,7 @@ export default function Canvas({
             />
           )}
         </Layer>
-        <Layer listening={false}>
-          {cursors.map((c) => (
-            <Group
-              key={c.connectionId}
-              x={c.x}
-              y={c.y}
-              scaleX={1 / camera.scale}
-              scaleY={1 / camera.scale}
-            >
-              <Path
-                data="M 0 0 L 12 5 L 7 7 L 10 13 L 8 14 L 5 8 L 0 12 Z"
-                fill={c.color}
-                stroke="white"
-                strokeWidth={1}
-                shadowColor="rgba(0,0,0,0.4)"
-                shadowBlur={4}
-                shadowOffset={{ x: 0, y: 1 }}
-              />
-              <Group x={14} y={-4}>
-                <Rect
-                  fill={c.color}
-                  cornerRadius={4}
-                  height={16}
-                  width={Math.max(32, c.name.length * 7)}
-                  opacity={0.9}
-                />
-                <Text
-                  text={c.name}
-                  fill="white"
-                  fontSize={10}
-                  fontStyle="bold"
-                  padding={4}
-                />
-              </Group>
-            </Group>
-          ))}
-        </Layer>
+        <RemoteCursorsLayer scale={camera.scale} />
       </Stage>
       {editingText && (
         <textarea
