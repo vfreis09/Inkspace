@@ -88,6 +88,13 @@ export default function Canvas({
   const palette = CANVAS_THEME[resolvedTheme === "dark" ? "dark" : "light"];
 
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
+
+
+  const latest = useRef({ canEdit, cameraScale: camera.scale, onShapeUpdate });
+  useLayoutEffect(() => {
+    latest.current = { canEdit, cameraScale: camera.scale, onShapeUpdate };
+  });
+
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [gridImage, setGridImage] = useState<HTMLImageElement | undefined>(
     undefined,
@@ -365,98 +372,95 @@ export default function Canvas({
 
   const groupDragOffsets = useRef<Map<string, { x: number; y: number }>>(new Map());
 
-  const handleShapeDragStart = useCallback(
-    (id: string) => (e: KonvaEventObject<DragEvent>) => {
-      setGuides({ vertical: [], horizontal: [] });
-      if (!canEdit || selectedIds.length <= 1 || !selectedIds.includes(id)) return;
-      const stage = e.target.getStage();
-      if (!stage) return;
+  const handleShapeDragStart = useCallback((e: KonvaEventObject<DragEvent>) => {
+    setGuides({ vertical: [], horizontal: [] });
+    const id = e.target.id();
+    const { selectedIds } = useStore.getState();
+    if (!latest.current.canEdit || selectedIds.length <= 1 || !selectedIds.includes(id)) return;
+    const stage = e.target.getStage();
+    if (!stage) return;
 
-      groupDragOffsets.current.clear();
-      selectedIds.forEach((sid) => {
-        if (sid === id) return;
+    groupDragOffsets.current.clear();
+    selectedIds.forEach((sid) => {
+      if (sid === id) return;
+      const node = stage.findOne("#" + sid);
+      if (node) {
+        groupDragOffsets.current.set(sid, {
+          x: node.x() - e.target.x(),
+          y: node.y() - e.target.y(),
+        });
+      }
+    });
+  }, []);
+
+  const handleShapeDragMove = useCallback((e: KonvaEventObject<DragEvent>) => {
+    const { canEdit, cameraScale } = latest.current;
+    if (!canEdit) return;
+    const stage = e.target.getStage();
+    if (!stage) return;
+
+    const id = e.target.id();
+    const { shapes, selectedIds } = useStore.getState();
+    const shape = shapes.find((s) => s.id === id);
+    if (!shape) return;
+
+    const isGroup = selectedIds.length > 1 && selectedIds.includes(id);
+
+    if (isGroup) {
+      const draggedX = e.target.x();
+      const draggedY = e.target.y();
+      groupDragOffsets.current.forEach((offset, sid) => {
         const node = stage.findOne("#" + sid);
         if (node) {
-          groupDragOffsets.current.set(sid, {
-            x: node.x() - e.target.x(),
-            y: node.y() - e.target.y(),
-          });
+          node.x(draggedX + offset.x);
+          node.y(draggedY + offset.y);
         }
       });
-    },
-    [canEdit, selectedIds],
-  );
+    }
 
+    const liveX = shape.type === "circle" ? e.target.x() - shape.width / 2 : e.target.x();
+    const liveY = shape.type === "circle" ? e.target.y() - shape.height / 2 : e.target.y();
 
-  const handleShapeDragMove = useCallback(
-    (id: string) => (e: KonvaEventObject<DragEvent>) => {
-      if (!canEdit) return;
-      const stage = e.target.getStage();
-      if (!stage) return;
+    const draggedBounds = getShapeBounds({ ...shape, x: liveX, y: liveY });
+    const targets = shapes.filter((s) =>
+      isGroup ? !selectedIds.includes(s.id) : s.id !== id,
+    );
+    const threshold = SNAP_THRESHOLD_PX / cameraScale;
+    const { dx, dy, guides: newGuides } = computeSnap(draggedBounds, targets, threshold);
 
-      const shape = shapes.find((s) => s.id === id);
-      if (!shape) return;
-
-      const isGroup = selectedIds.length > 1 && selectedIds.includes(id);
-
+    if (dx !== 0 || dy !== 0) {
+      e.target.x(e.target.x() + dx);
+      e.target.y(e.target.y() + dy);
       if (isGroup) {
-        const draggedX = e.target.x();
-        const draggedY = e.target.y();
-        groupDragOffsets.current.forEach((offset, sid) => {
+        groupDragOffsets.current.forEach((_, sid) => {
           const node = stage.findOne("#" + sid);
           if (node) {
-            node.x(draggedX + offset.x);
-            node.y(draggedY + offset.y);
+            node.x(node.x() + dx);
+            node.y(node.y() + dy);
           }
         });
       }
+    }
 
-      const liveX = shape.type === "circle" ? e.target.x() - shape.width / 2 : e.target.x();
-      const liveY = shape.type === "circle" ? e.target.y() - shape.height / 2 : e.target.y();
+    setGuides(newGuides);
 
-      const draggedBounds = getShapeBounds({ ...shape, x: liveX, y: liveY });
-      const targets = shapes.filter((s) =>
-        isGroup ? !selectedIds.includes(s.id) : s.id !== id,
-      );
-      const threshold = SNAP_THRESHOLD_PX / camera.scale;
-      const { dx, dy, guides: newGuides } = computeSnap(draggedBounds, targets, threshold);
+    trRef.current?.forceUpdate?.();
+    trRef.current?.getLayer()?.batchDraw();
+  }, []);
 
-      if (dx !== 0 || dy !== 0) {
-        e.target.x(e.target.x() + dx);
-        e.target.y(e.target.y() + dy);
-        if (isGroup) {
-          groupDragOffsets.current.forEach((_, sid) => {
-            const node = stage.findOne("#" + sid);
-            if (node) {
-              node.x(node.x() + dx);
-              node.y(node.y() + dy);
-            }
-          });
-        }
-      }
-
-      setGuides(newGuides);
-
-      trRef.current?.forceUpdate?.();
-      trRef.current?.getLayer()?.batchDraw();
-    },
-    [canEdit, selectedIds, shapes, camera.scale],
-  );
-
-  const handleTextDblClick = useCallback(
-    (shape: Shape) => {
-      if (!canEdit || shape.type !== "text") return;
-      selectShapes([]);
-      setEditingText({
-        id: shape.id,
-        x: shape.x,
-        y: shape.y,
-        value: shape.text ?? "",
-        fontSize: shape.fontSize ?? 20,
-      });
-    },
-    [canEdit, selectShapes],
-  );
+  const handleTextDblClick = useCallback((e: KonvaEventObject<MouseEvent>) => {
+    if (!latest.current.canEdit) return;
+    const shape = useStore.getState().shapes.find((s) => s.id === e.target.id());
+    if (!shape || shape.type !== "text") return;
+    useStore.getState().selectShapes([]);
+    setEditingText({
+      id: shape.id,
+      x: shape.x,
+      y: shape.y,
+      value: shape.text ?? "",
+      fontSize: shape.fontSize ?? 20,
+    });
+  }, []);
 
   const commitTextEdit = useCallback(() => {
     const current = editingTextRef.current;
@@ -503,76 +507,83 @@ export default function Canvas({
     setEditingText(null);
   }, []);
 
-  const handleDragEnd = useCallback(
-    (id: string, type: string, width: number, height: number) =>
-      (e: KonvaEventObject<DragEvent>) => {
-        if (!canEdit) return;
-        setGuides({ vertical: [], horizontal: [] });
-        const n = e.target;
-        const draggedProps =
-          type === "circle"
-            ? { x: n.x() - width / 2, y: n.y() - height / 2 }
-            : { x: n.x(), y: n.y() };
+  const handleDragEnd = useCallback((e: KonvaEventObject<DragEvent>) => {
+    const { canEdit, onShapeUpdate } = latest.current;
+    if (!canEdit) return;
+    setGuides({ vertical: [], horizontal: [] });
 
-        if (selectedIds.length > 1 && selectedIds.includes(id)) {
-          const stage = n.getStage();
-          const updates = selectedIds.map((sid) => {
-            const shape = shapes.find((s) => s.id === sid)!;
-            if (sid === id) {
-              return { id: sid, oldProps: { x: shape.x, y: shape.y }, newProps: draggedProps };
-            }
-            const node = stage?.findOne("#" + sid);
-            const nx = node ? (shape.type === "circle" ? node.x() - shape.width / 2 : node.x()) : shape.x;
-            const ny = node ? (shape.type === "circle" ? node.y() - shape.height / 2 : node.y()) : shape.y;
-            return { id: sid, oldProps: { x: shape.x, y: shape.y }, newProps: { x: nx, y: ny } };
-          });
+    const { shapes, selectedIds, updateShapeLocally, updateShapesBatchLocally } =
+      useStore.getState();
+    const n = e.target;
+    const id = n.id();
+    const self = shapes.find((s) => s.id === id);
+    if (!self) return;
 
-          updateShapesBatchLocally(updates);
-          updates.forEach((u) => onShapeUpdate?.(u.id, u.newProps));
-          groupDragOffsets.current.clear();
-          return;
+    const draggedProps =
+      self.type === "circle"
+        ? { x: n.x() - self.width / 2, y: n.y() - self.height / 2 }
+        : { x: n.x(), y: n.y() };
+
+    if (selectedIds.length > 1 && selectedIds.includes(id)) {
+      const stage = n.getStage();
+      const updates = selectedIds.flatMap((sid) => {
+        const shape = shapes.find((s) => s.id === sid);
+        if (!shape) return [];
+        if (sid === id) {
+          return [{ id: sid, oldProps: { x: shape.x, y: shape.y }, newProps: draggedProps }];
         }
+        const node = stage?.findOne("#" + sid);
+        const nx = node ? (shape.type === "circle" ? node.x() - shape.width / 2 : node.x()) : shape.x;
+        const ny = node ? (shape.type === "circle" ? node.y() - shape.height / 2 : node.y()) : shape.y;
+        return [{ id: sid, oldProps: { x: shape.x, y: shape.y }, newProps: { x: nx, y: ny } }];
+      });
 
-        updateShapeLocally(id, draggedProps, true);
-        onShapeUpdate?.(id, draggedProps);
-      },
-    [canEdit, updateShapeLocally, onShapeUpdate, selectedIds, shapes, updateShapesBatchLocally],
-  );
+      updateShapesBatchLocally(updates);
+      updates.forEach((u) => onShapeUpdate?.(u.id, u.newProps));
+      groupDragOffsets.current.clear();
+      return;
+    }
 
-  const handleTransformEnd = useCallback(
-    (id: string, type: string, oldPoints?: number[], oldFontSize?: number) =>
-      (e: KonvaEventObject<Event>) => {
-        if (!canEdit) return;
-        const n = e.target;
-        const sx = n.scaleX();
-        const sy = n.scaleY();
-        n.scaleX(1);
-        n.scaleY(1);
-        let props: Partial<Shape> = {
-          x: n.x(),
-          y: n.y(),
-          rotation: n.rotation(),
-        };
-        if (type === "rect") {
-          props.width = Math.max(5, n.width() * sx);
-          props.height = Math.max(5, n.height() * sy);
-        } else if (type === "circle") {
-          const nw = Math.max(5, n.width() * sx);
-          const nh = Math.max(5, n.height() * sy);
-          props = { ...props, x: n.x() - nw / 2, y: n.y() - nh / 2, width: nw, height: nh };
-        } else if (type === "text") {
-          const scale = (sx + sy) / 2;
-          props.fontSize = Math.max(8, (oldFontSize ?? 20) * scale);
-        } else {
-          props.points = (oldPoints ?? [0, 0, 0, 0]).map((p, i) =>
-            i % 2 === 0 ? p * sx : p * sy,
-          );
-        }
-        updateShapeLocally(id, props, true);
-        onShapeUpdate?.(id, props);
-      },
-    [canEdit, updateShapeLocally, onShapeUpdate],
-  );
+    updateShapeLocally(id, draggedProps, true);
+    onShapeUpdate?.(id, draggedProps);
+  }, []);
+
+  const handleTransformEnd = useCallback((e: KonvaEventObject<Event>) => {
+    const { canEdit, onShapeUpdate } = latest.current;
+    if (!canEdit) return;
+
+    const n = e.target;
+    const id = n.id();
+    const shape = useStore.getState().shapes.find((s) => s.id === id);
+    if (!shape) return;
+
+    const sx = n.scaleX();
+    const sy = n.scaleY();
+    n.scaleX(1);
+    n.scaleY(1);
+    let props: Partial<Shape> = {
+      x: n.x(),
+      y: n.y(),
+      rotation: n.rotation(),
+    };
+    if (shape.type === "rect") {
+      props.width = Math.max(5, n.width() * sx);
+      props.height = Math.max(5, n.height() * sy);
+    } else if (shape.type === "circle") {
+      const nw = Math.max(5, n.width() * sx);
+      const nh = Math.max(5, n.height() * sy);
+      props = { ...props, x: n.x() - nw / 2, y: n.y() - nh / 2, width: nw, height: nh };
+    } else if (shape.type === "text") {
+      const scale = (sx + sy) / 2;
+      props.fontSize = Math.max(8, (shape.fontSize ?? 20) * scale);
+    } else {
+      props.points = (shape.points ?? [0, 0, 0, 0]).map((p, i) =>
+        i % 2 === 0 ? p * sx : p * sy,
+      );
+    }
+    useStore.getState().updateShapeLocally(id, props, true);
+    onShapeUpdate?.(id, props);
+  }, []);
 
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     e.evt.preventDefault();
@@ -941,11 +952,11 @@ export default function Canvas({
               canEdit={canEdit}
               cameraScale={camera.scale}
               isEditing={editingText?.id === s.id}
-              onDragStart={handleShapeDragStart(s.id)}
-              onDragMove={handleShapeDragMove(s.id)}
-              onDragEnd={handleDragEnd(s.id, s.type, s.width, s.height)}
-              onTransformEnd={handleTransformEnd(s.id, s.type, s.points, s.fontSize)}
-              onDblClick={() => handleTextDblClick(s)}
+              onDragStart={handleShapeDragStart}
+              onDragMove={handleShapeDragMove}
+              onDragEnd={handleDragEnd}
+              onTransformEnd={handleTransformEnd}
+              onDblClick={handleTextDblClick}
             />
           ))}
           {guides.vertical.map((x) => (

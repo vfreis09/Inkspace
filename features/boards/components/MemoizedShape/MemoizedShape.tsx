@@ -16,7 +16,7 @@ interface MemoizedShapeProps {
   onDragMove: (e: KonvaEventObject<DragEvent>) => void;
   onDragEnd: (e: KonvaEventObject<DragEvent>) => void;
   onTransformEnd: (e: KonvaEventObject<Event>) => void;
-  onDblClick?: () => void;
+  onDblClick?: (e: KonvaEventObject<MouseEvent>) => void;
 }
 
 export const MemoizedShape = React.memo(
@@ -145,7 +145,12 @@ export const MemoizedShape = React.memo(
     prev.isSelectMode === next.isSelectMode &&
     prev.canEdit === next.canEdit &&
     prev.isEditing === next.isEditing &&
-    prev.cameraScale === next.cameraScale,
+    prev.cameraScale === next.cameraScale &&
+    prev.onDragStart === next.onDragStart &&
+    prev.onDragMove === next.onDragMove &&
+    prev.onDragEnd === next.onDragEnd &&
+    prev.onTransformEnd === next.onTransformEnd &&
+    prev.onDblClick === next.onDblClick,
 );
 
 MemoizedShape.displayName = "MemoizedShape";
