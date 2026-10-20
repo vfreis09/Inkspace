@@ -951,7 +951,6 @@ export default function Canvas({
               isSelected={selectedIds.includes(s.id)}
               isSelectMode={currentTool === "select"}
               canEdit={canEdit}
-              cameraScale={camera.scale}
               isEditing={editingText?.id === s.id}
               onDragStart={handleShapeDragStart}
               onDragMove={handleShapeDragMove}
@@ -989,7 +988,6 @@ export default function Canvas({
               isSelected={false}
               isSelectMode={false}
               canEdit={canEdit}
-              cameraScale={camera.scale}
               onDragStart={() => {}}
               onDragMove={() => {}}
               onDragEnd={() => {}}
