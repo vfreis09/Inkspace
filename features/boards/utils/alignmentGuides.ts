@@ -65,9 +65,9 @@ type SnapResult = {
   guides: GuideLines;
 };
 
-export function computeSnap(
+export function computeSnapToBounds(
   draggedBounds: Bounds,
-  targets: Shape[],
+  targetBounds: Bounds[],
   threshold: number,
 ): SnapResult {
   const vCandidates = [draggedBounds.left, draggedBounds.centerX, draggedBounds.right];
@@ -81,8 +81,7 @@ export function computeSnap(
   let bestDyDist = threshold;
   let hGuide: number | null = null;
 
-  for (const target of targets) {
-    const b = getShapeBounds(target);
+  for (const b of targetBounds) {
     const vTargets = [b.left, b.centerX, b.right];
     const hTargets = [b.top, b.centerY, b.bottom];
 
@@ -116,4 +115,16 @@ export function computeSnap(
       horizontal: hGuide !== null ? [hGuide] : [],
     },
   };
+}
+
+export function computeSnap(
+  draggedBounds: Bounds,
+  targets: Shape[],
+  threshold: number,
+): SnapResult {
+  return computeSnapToBounds(
+    draggedBounds,
+    targets.map((t) => getShapeBounds(t)),
+    threshold,
+  );
 }
