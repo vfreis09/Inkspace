@@ -297,10 +297,11 @@ export const useStore = create<CanvasState>((set, get) => ({
 
   updateShapesBatchLocally: (updates) => {
     const action: Action = { type: "UPDATE_BATCH", updates };
+    const byId = new Map(updates.map((u) => [u.id, u.newProps]));
     set((state) => ({
       shapes: state.shapes.map((s) => {
-        const u = updates.find((u) => u.id === s.id);
-        return u ? { ...s, ...u.newProps } : s;
+        const props = byId.get(s.id);
+        return props ? { ...s, ...props } : s;
       }),
       history: { past: [...state.history.past, action], future: [] },
       canUndo: true,
@@ -310,12 +311,13 @@ export const useStore = create<CanvasState>((set, get) => ({
 
   deleteShapesLocally: (ids) => {
     const { shapes } = get();
-    const deletedShapes = shapes.filter((s) => ids.includes(s.id));
+    const idSet = new Set(ids);
+    const deletedShapes = shapes.filter((s) => idSet.has(s.id));
     const action: Action = { type: "DELETE", shapes: deletedShapes };
 
     set((state) => ({
-      shapes: state.shapes.filter((s) => !ids.includes(s.id)),
-      selectedIds: state.selectedIds.filter((id) => !ids.includes(id)),
+      shapes: state.shapes.filter((s) => !idSet.has(s.id)),
+      selectedIds: state.selectedIds.filter((id) => !idSet.has(id)),
       history: { past: [...state.history.past, action], future: [] },
       canUndo: true,
       canRedo: false,
@@ -346,13 +348,14 @@ export const useStore = create<CanvasState>((set, get) => ({
             s.id === action.id ? { ...s, ...action.oldProps } : s,
           );
           break;
-        case "UPDATE_BATCH":
-          action.updates.forEach((u) => {
-            newShapes = newShapes.map((s) =>
-              s.id === u.id ? { ...s, ...u.oldProps } : s,
-            );
+        case "UPDATE_BATCH": {
+          const byId = new Map(action.updates.map((u) => [u.id, u.oldProps]));
+          newShapes = newShapes.map((s) => {
+            const props = byId.get(s.id);
+            return props ? { ...s, ...props } : s;
           });
           break;
+        }
       }
 
       return {
@@ -379,22 +382,24 @@ export const useStore = create<CanvasState>((set, get) => ({
         case "ADD":
           newShapes = [...newShapes, action.shape];
           break;
-        case "DELETE":
-          const idsToRemove = action.shapes.map((s) => s.id);
-          newShapes = newShapes.filter((s) => !idsToRemove.includes(s.id));
+        case "DELETE": {
+          const idsToRemove = new Set(action.shapes.map((s) => s.id));
+          newShapes = newShapes.filter((s) => !idsToRemove.has(s.id));
           break;
+        }
         case "UPDATE":
           newShapes = newShapes.map((s) =>
             s.id === action.id ? { ...s, ...action.newProps } : s,
           );
           break;
-        case "UPDATE_BATCH":
-          action.updates.forEach((u) => {
-            newShapes = newShapes.map((s) =>
-              s.id === u.id ? { ...s, ...u.newProps } : s,
-            );
+        case "UPDATE_BATCH": {
+          const byId = new Map(action.updates.map((u) => [u.id, u.newProps]));
+          newShapes = newShapes.map((s) => {
+            const props = byId.get(s.id);
+            return props ? { ...s, ...props } : s;
           });
           break;
+        }
       }
 
       return {

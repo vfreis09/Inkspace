@@ -24,14 +24,13 @@ export async function PUT(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await batchUpsertForBoard(
-    boardId,
-    executorId,
-    shapes,
-    deletedIds,
-    snapshot,
-  );
-
+  let result;
+  try {
+    result = await batchUpsertForBoard(boardId, executorId, shapes, deletedIds, snapshot);
+  } catch (err) {
+    console.error("Batch upsert failed:", err);
+    return NextResponse.json({ error: "Sync failed" }, { status: 500 });
+  }
   if (!result.ok) {
     return NextResponse.json({ error: "Sync failed" }, { status: 500 });
   }

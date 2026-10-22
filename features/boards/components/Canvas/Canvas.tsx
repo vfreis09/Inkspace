@@ -57,6 +57,7 @@ const EXPORT_PADDING = 40;
 const EXPORT_MAX_SIDE_PX = 8192;
 const EXPORT_MAX_AREA_PX = 16_000_000;
 const CULL_PADDING_PX = 200;
+const MAX_TRANSFORMER_NODES = 40;
 
 export default function Canvas({
   onCursorMove,
@@ -149,6 +150,12 @@ export default function Canvas({
     return orderedShapes.filter((s) => keep.has(s.id) || isShapeInViewport(s, viewport, pad));
   }, [orderedShapes, viewport, selectedIds, editingText?.id, camera.scale]);
 
+  const bigSelectionBox = useMemo(() => {
+    if (selectedIds.length <= MAX_TRANSFORMER_NODES) return null;
+    const ids = new Set(selectedIds);
+    return getShapesBoundingBox(shapes.filter((s) => ids.has(s.id)));
+  }, [selectedIds, shapes]);
+
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const editingTextRef = useRef(editingText);
@@ -172,6 +179,7 @@ export default function Canvas({
   }, []);
 
   const shiftSelectRef = useRef(false);
+  const nudgeRef = useRef({ dx: 0, dy: 0, frame: 0 });
 
   const hudRef = useRef<CanvasHudHandle>(null);
 
@@ -334,28 +342,40 @@ export default function Canvas({
       }
 
       // Nudge selected shape(s) with arrow keys
-      if (
-        canEdit &&
-        selectedIds.length > 0 &&
-        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
-      ) {
-        e.preventDefault();
-        const step = e.shiftKey ? 10 : 1;
-        const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
-        const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+    if (
+      canEdit &&
+      selectedIds.length > 0 &&
+      ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
+    ) {
+      e.preventDefault();
+      const step = e.shiftKey ? 10 : 1;
+      nudgeRef.current.dx += e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+      nudgeRef.current.dy += e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
 
-        const updates = selectedIds.map((id) => {
-          const shape = shapes.find((s) => s.id === id)!;
-          return {
+    if (!nudgeRef.current.frame) {
+      nudgeRef.current.frame = requestAnimationFrame(() => {
+        const { dx, dy } = nudgeRef.current;
+        nudgeRef.current = { dx: 0, dy: 0, frame: 0 };
+        if (dx === 0 && dy === 0) return;
+
+        const { shapes, selectedIds, updateShapesBatchLocally } = useStore.getState();
+        const byId = new Map(shapes.map((s) => [s.id, s]));
+        const updates = selectedIds.flatMap((id) => {
+          const shape = byId.get(id);
+          if (!shape) return [];
+          return [{
             id,
             oldProps: { x: shape.x, y: shape.y },
             newProps: { x: shape.x + dx, y: shape.y + dy },
-          };
+          }];
         });
+        if (updates.length === 0) return;
 
         updateShapesBatchLocally(updates);
-        updates.forEach((u) => onShapeUpdate?.(u.id, u.newProps));
-      }
+        updates.forEach((u) => latest.current.onShapeUpdate?.(u.id, u.newProps));
+      });
+    }
+  }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -1028,16 +1048,31 @@ export default function Canvas({
               listening={false}
             />
           )}
-          {selectedIds.length > 0 && canEdit && !editingText && (
-            <Transformer
-              ref={trRef}
-              rotateEnabled
-              ignoreStroke
-              anchorSize={10 / camera.scale}
-              borderStrokeWidth={1 / camera.scale}
-              boundBoxFunc={(oldB, newB) =>
-                Math.abs(newB.width) < 5 / camera.scale ? oldB : newB
-              }
+          {selectedIds.length > 0 &&
+            selectedIds.length <= MAX_TRANSFORMER_NODES &&
+            canEdit &&
+            !editingText && (
+              <Transformer
+                ref={trRef}
+                rotateEnabled
+                ignoreStroke
+                anchorSize={10 / camera.scale}
+                borderStrokeWidth={1 / camera.scale}
+                boundBoxFunc={(oldB, newB) =>
+                  Math.abs(newB.width) < 5 / camera.scale ? oldB : newB
+                }
+              />
+            )}
+          {bigSelectionBox && (
+            <Rect
+              x={bigSelectionBox.left}
+              y={bigSelectionBox.top}
+              width={bigSelectionBox.right - bigSelectionBox.left}
+              height={bigSelectionBox.bottom - bigSelectionBox.top}
+              stroke="#6366f1"
+              strokeWidth={1 / camera.scale}
+              dash={[6 / camera.scale, 4 / camera.scale]}
+              listening={false}
             />
           )}
         </Layer>

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import type { ShapeType } from "@prisma/client";
 
 export type ShapeCreateInput = {
@@ -22,6 +23,19 @@ export type ShapeUpdateInput = Partial<Omit<ShapeCreateInput, "type">>;
 export type BatchInput = {
   id?: string;
 } & Partial<ShapeCreateInput>;
+
+const BATCH_CHUNK = 1000;
+
+const num = (v: unknown): number | null =>
+  typeof v === "number" && Number.isFinite(v) ? v : null;
+const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 
 export async function getShapesByBoardId(boardId: string) {
   return prisma.shape.findMany({
@@ -104,50 +118,114 @@ export async function batchUpsertShapes(
   shapes: BatchInput[],
   deletedIds: string[],
 ) {
-  return prisma.$transaction(async (tx) => {
-    if (deletedIds.length > 0) {
-      await tx.shape.deleteMany({
-        where: { id: { in: deletedIds }, boardId },
-      });
-    }
+  // One entry per id, later values win
+  const byId = new Map<string, BatchInput>();
+  for (const s of shapes) {
+    if (!s.id) continue;
+    byId.set(s.id, { ...(byId.get(s.id) ?? {}), ...s });
+  }
+  const all = Array.from(byId.values());
+  const full = all.filter((s) => s.type !== undefined);
+  const partial = all.filter((s) => s.type === undefined);
+  const partialWithPoints = partial.filter((s) => s.points !== undefined);
+  const partialPlain = partial.filter((s) => s.points === undefined);
 
-    for (const shape of shapes) {
-      if (!shape.id) continue;
+  return prisma.$transaction(
+    async (tx) => {
+      if (deletedIds.length > 0) {
+        await tx.shape.deleteMany({ where: { id: { in: deletedIds }, boardId } });
+      }
 
-      const payload: Record<string, any> = { lastEditedBy: userId };
-
-      if (shape.type !== undefined) payload.type = shape.type;
-      if (shape.x !== undefined) payload.x = shape.x;
-      if (shape.y !== undefined) payload.y = shape.y;
-      if (shape.width !== undefined) payload.width = shape.width;
-      if (shape.height !== undefined) payload.height = shape.height;
-      if (shape.rotation !== undefined) payload.rotation = shape.rotation;
-      if (shape.fill !== undefined) payload.fill = shape.fill;
-      if (shape.stroke !== undefined) payload.stroke = shape.stroke;
-      if (shape.strokeWidth !== undefined)
-        payload.strokeWidth = shape.strokeWidth;
-      if (shape.points !== undefined) payload.points = shape.points;
-      if (shape.order !== undefined) payload.order = shape.order;
-      if (shape.text !== undefined) payload.text = shape.text;
-      if (shape.fontSize !== undefined) payload.fontSize = shape.fontSize; 
-
-      if (payload.type) {
-        await tx.shape.upsert({
-          where: { id: shape.id },
-          update: payload,
-          create: { id: shape.id, boardId, ...payload } as any,
+      // New or fully re-sent shapes: replace the rows
+      if (full.length > 0) {
+        await tx.shape.deleteMany({
+          where: { id: { in: full.map((s) => s.id as string) }, boardId },
         });
-      } else {
+        const rows: Prisma.ShapeCreateManyInput[] = full.map((s) => ({
+          id: s.id as string,
+          boardId,
+          lastEditedBy: userId,
+          type: s.type as ShapeType,
+          x: s.x ?? 0,
+          y: s.y ?? 0,
+          width: s.width ?? 0,
+          height: s.height ?? 0,
+          rotation: s.rotation ?? 0,
+          fill: s.fill ?? "#000000",
+          stroke: s.stroke ?? "#000000",
+          strokeWidth: s.strokeWidth ?? 1,
+          points: s.points ?? [],
+          order: s.order ?? 0,
+          text: s.text ?? null,
+          fontSize: s.fontSize ?? null,
+        }));
+        for (const part of chunk(rows, BATCH_CHUNK)) {
+          await tx.shape.createMany({ data: part });
+        }
+      }
+
+      // Partial updates without points: one statement per chunk
+      for (const part of chunk(partialPlain, BATCH_CHUNK)) {
+        const ids = part.map((s) => s.id as string);
+        const xs = part.map((s) => num(s.x));
+        const ys = part.map((s) => num(s.y));
+        const ws = part.map((s) => num(s.width));
+        const hs = part.map((s) => num(s.height));
+        const rots = part.map((s) => num(s.rotation));
+        const fills = part.map((s) => str(s.fill));
+        const strokes = part.map((s) => str(s.stroke));
+        const sws = part.map((s) => num(s.strokeWidth));
+        const ords = part.map((s) => {
+          const v = num(s.order);
+          return v === null ? null : Math.round(v);
+        });
+        const txts = part.map((s) => str(s.text));
+        const fss = part.map((s) => num(s.fontSize));
+
+        await tx.$executeRaw`
+          UPDATE "Shape" AS s SET
+            "x" = COALESCE(v.x, s."x"),
+            "y" = COALESCE(v.y, s."y"),
+            "width" = COALESCE(v.w, s."width"),
+            "height" = COALESCE(v.h, s."height"),
+            "rotation" = COALESCE(v.rot, s."rotation"),
+            "fill" = COALESCE(v.fill, s."fill"),
+            "stroke" = COALESCE(v.stroke, s."stroke"),
+            "strokeWidth" = COALESCE(v.sw, s."strokeWidth"),
+            "order" = COALESCE(v.ord, s."order"),
+            "text" = COALESCE(v.txt, s."text"),
+            "fontSize" = COALESCE(v.fs, s."fontSize"),
+            "lastEditedBy" = ${userId},
+            "updatedAt" = NOW()
+          FROM unnest(
+            ${ids}::text[], ${xs}::float8[], ${ys}::float8[], ${ws}::float8[],
+            ${hs}::float8[], ${rots}::float8[], ${fills}::text[], ${strokes}::text[],
+            ${sws}::float8[], ${ords}::int[], ${txts}::text[], ${fss}::float8[]
+          ) AS v(id, x, y, w, h, rot, fill, stroke, sw, ord, txt, fs)
+          WHERE s."id" = v.id AND s."boardId" = ${boardId}
+        `;
+      }
+
+      // Partial updates that include points: rare, keep them simple
+      for (const s of partialWithPoints) {
         await tx.shape.updateMany({
-          where: { id: shape.id, boardId },
-          data: payload,
+          where: { id: s.id as string, boardId },
+          data: {
+            lastEditedBy: userId,
+            points: s.points,
+            ...(s.x !== undefined && { x: s.x }),
+            ...(s.y !== undefined && { y: s.y }),
+            ...(s.width !== undefined && { width: s.width }),
+            ...(s.height !== undefined && { height: s.height }),
+            ...(s.rotation !== undefined && { rotation: s.rotation }),
+            ...(s.strokeWidth !== undefined && { strokeWidth: s.strokeWidth }),
+            ...(s.order !== undefined && { order: s.order }),
+          },
         });
       }
-    }
 
-    await tx.board.update({
-      where: { id: boardId },
-      data: { updatedAt: new Date() },
-    });
-  });
+      await tx.board.update({ where: { id: boardId }, data: { updatedAt: new Date() } });
+    },
+    { timeout: 20000, maxWait: 5000 },
+  );
 }
