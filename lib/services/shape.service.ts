@@ -26,7 +26,7 @@ export type BatchInput = {
 
 const BATCH_CHUNK = 1000;
 
-const num = (v: unknown): number | null =>
+const fin = (v: unknown): number | null =>
   typeof v === "number" && Number.isFinite(v) ? v : null;
 const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
 
@@ -166,21 +166,25 @@ export async function batchUpsertShapes(
 
       // Partial updates without points: one statement per chunk
       for (const part of chunk(partialPlain, BATCH_CHUNK)) {
-        const ids = part.map((s) => s.id as string);
-        const xs = part.map((s) => num(s.x));
-        const ys = part.map((s) => num(s.y));
-        const ws = part.map((s) => num(s.width));
-        const hs = part.map((s) => num(s.height));
-        const rots = part.map((s) => num(s.rotation));
-        const fills = part.map((s) => str(s.fill));
-        const strokes = part.map((s) => str(s.stroke));
-        const sws = part.map((s) => num(s.strokeWidth));
-        const ords = part.map((s) => {
-          const v = num(s.order);
-          return v === null ? null : Math.round(v);
-        });
-        const txts = part.map((s) => str(s.text));
-        const fss = part.map((s) => num(s.fontSize));
+        const payload = JSON.stringify(
+          part.map((s) => {
+            const ord = fin(s.order);
+            return {
+              id: s.id,
+              x: fin(s.x),
+              y: fin(s.y),
+              w: fin(s.width),
+              h: fin(s.height),
+              rot: fin(s.rotation),
+              fill: str(s.fill),
+              stroke: str(s.stroke),
+              sw: fin(s.strokeWidth),
+              ord: ord === null ? null : Math.round(ord),
+              txt: str(s.text),
+              fs: fin(s.fontSize),
+            };
+          }),
+        );
 
         await tx.$executeRaw`
           UPDATE "Shape" AS s SET
@@ -197,11 +201,10 @@ export async function batchUpsertShapes(
             "fontSize" = COALESCE(v.fs, s."fontSize"),
             "lastEditedBy" = ${userId},
             "updatedAt" = NOW()
-          FROM unnest(
-            ${ids}::text[], ${xs}::float8[], ${ys}::float8[], ${ws}::float8[],
-            ${hs}::float8[], ${rots}::float8[], ${fills}::text[], ${strokes}::text[],
-            ${sws}::float8[], ${ords}::int[], ${txts}::text[], ${fss}::float8[]
-          ) AS v(id, x, y, w, h, rot, fill, stroke, sw, ord, txt, fs)
+          FROM jsonb_to_recordset(${payload}::jsonb) AS v(
+            id text, x float8, y float8, w float8, h float8, rot float8,
+            fill text, stroke text, sw float8, ord int, txt text, fs float8
+          )
           WHERE s."id" = v.id AND s."boardId" = ${boardId}
         `;
       }
