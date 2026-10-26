@@ -38,6 +38,12 @@ export default class InkspaceParty implements Party.Server {
   private pendingDeletes = new Set<string>();
   private flushCount = 0;
   private readonly SNAPSHOT_EVERY_N_FLUSHES = 10;
+  private flushing = false;
+  private retryDelay = 1000;
+  private failedAttempts = 0;
+  private deadLetter: { upserts: any[]; deletes: string[] }[] = [];
+  private readonly MAX_RETRY_DELAY = 30000;
+  private readonly MAX_FAILED_ATTEMPTS = 5;
 
   constructor(readonly room: Party.Room) {}
 
@@ -186,14 +192,23 @@ export default class InkspaceParty implements Party.Server {
     }
   }
 
-  private scheduleSave() {
+  private scheduleSave(delay = 1000) {
     if (this.saveTimer) clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => this.flushToDB(), 1000);
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      void this.flushToDB();
+    }, delay);
   }
 
+
   private async flushToDB() {
-    if (this.pendingUpserts.size === 0 && this.pendingDeletes.size === 0)
+    if (this.pendingUpserts.size === 0 && this.pendingDeletes.size === 0) return;
+
+    if (this.flushing) {
+      this.scheduleSave();
       return;
+    }
+    this.flushing = true;
 
     const upserts = Array.from(this.pendingUpserts.values());
     const deletes = Array.from(this.pendingDeletes);
@@ -202,9 +217,9 @@ export default class InkspaceParty implements Party.Server {
     this.pendingDeletes.clear();
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const shouldSnapshot = (this.flushCount + 1) % this.SNAPSHOT_EVERY_N_FLUSHES === 0;
 
-    this.flushCount++;
-    const shouldSnapshot = this.flushCount % this.SNAPSHOT_EVERY_N_FLUSHES === 0; 
+    let rejectedByServer = false;
 
     try {
       const response = await fetch(
@@ -213,20 +228,59 @@ export default class InkspaceParty implements Party.Server {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            "x-partykit-secret":
-              SECRET,
+            "x-partykit-secret": SECRET,
           },
-          body: JSON.stringify({ shapes: upserts, deletedIds: deletes, snapshot: shouldSnapshot, }),
+          body: JSON.stringify({ shapes: upserts, deletedIds: deletes, snapshot: shouldSnapshot }),
         },
       );
 
       if (!response.ok) {
-        throw new Error(`DB Save Failed: ${response.statusText}`);
+        rejectedByServer = true;
+        throw new Error(`DB Save Failed: ${response.status} ${response.statusText}`);
       }
+
+      this.flushCount++;
+      this.failedAttempts = 0;
+      this.retryDelay = 1000;
     } catch (err) {
-      console.error("Flush Error:", err);
-      upserts.forEach((s) => this.pendingUpserts.set(s.id, s));
-      deletes.forEach((id) => this.pendingDeletes.add(id));
+      if (rejectedByServer) {
+        this.failedAttempts++;
+        console.error(
+          `Flush rejected by server (attempt ${this.failedAttempts}/${this.MAX_FAILED_ATTEMPTS}):`,
+          err,
+        );
+      } else {
+        console.error("Flush failed, server unreachable. Will keep retrying:", err);
+      }
+
+      if (rejectedByServer && this.failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+        // The server keeps answering with an error: set this batch aside
+        this.deadLetter.push({ upserts, deletes });
+        console.error(
+          `Giving up on a batch of ${upserts.length} upserts and ${deletes.length} deletes. ` +
+            `Shape ids: ${[...upserts.map((s) => s.id), ...deletes].slice(0, 20).join(", ")}`,
+        );
+        this.failedAttempts = 0;
+        this.retryDelay = 1000;
+      } else {
+        // Put the failed data back without overwriting anything newer
+        for (const s of upserts) {
+          if (this.pendingDeletes.has(s.id)) continue;
+          const newer = this.pendingUpserts.get(s.id);
+          this.pendingUpserts.set(s.id, { ...s, ...(newer ?? {}) });
+        }
+        for (const id of deletes) {
+          if (this.pendingUpserts.has(id)) continue;
+          this.pendingDeletes.add(id);
+        }
+        this.retryDelay = Math.min(this.retryDelay * 2, this.MAX_RETRY_DELAY);
+      }
+    } finally {
+      this.flushing = false;
+    }
+
+    if (this.pendingUpserts.size > 0 || this.pendingDeletes.size > 0) {
+      this.scheduleSave(this.retryDelay > 1000 ? this.retryDelay : 1000);
     }
   }
 }
