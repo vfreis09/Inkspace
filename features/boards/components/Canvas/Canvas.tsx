@@ -30,6 +30,7 @@ import { isShapeInViewport } from "@/features/boards/utils/viewportCulling";
 import { createExportNode } from "@/features/boards/utils/exportNodes";
 import CanvasHud, { type CanvasHudHandle } from "@/features/boards/components/CanvasHud/CanvasHud";
 import RemoteCursorsLayer from "@/features/boards/components/RemoteCursorsLayer/RemoteCursorsLayer";
+import { zoomAroundPoint, centerOnWorldPoint, getViewportCenter } from "@/features/boards/utils/cameraMath";
 
 type CanvasProps = {
   onCursorMove?: (x: number, y: number) => void;
@@ -905,6 +906,27 @@ export default function Canvas({
       .finally(() => exportStage.destroy());
   }, [orderedShapes, palette.bg]);
 
+  const handleSetZoom = useCallback(
+    (newScale: number) => {
+      setCamera((prev) =>
+        zoomAroundPoint(prev, newScale, { x: size.width / 2, y: size.height / 2 }),
+      );
+    },
+    [size.width, size.height],
+  );
+
+  const handleGoTo = useCallback(
+    (x: number, y: number) => {
+      setCamera((prev) => centerOnWorldPoint(prev.scale, x, y, size.width, size.height));
+    },
+    [size.width, size.height],
+  );
+
+  const viewCenter = useMemo(
+    () => getViewportCenter(camera, size.width, size.height),
+    [camera, size.width, size.height],
+  );
+
   if (size.width === 0) return null;
 
   return (
@@ -1113,7 +1135,13 @@ export default function Canvas({
           }}
         />
       )}
-      <CanvasHud ref={hudRef} scale={camera.scale} />
+      <CanvasHud
+        ref={hudRef}
+        scale={camera.scale}
+        center={viewCenter}
+        onSetZoom={handleSetZoom}
+        onGoTo={handleGoTo}
+      />
     </div>
   );
 }
