@@ -16,7 +16,10 @@ export function getShapeBounds(shape: Shape): Bounds {
   let height = shape.height;
 
   if (shape.type === "line" || shape.type === "arrow" || shape.type === "pen") {
-    const pts = shape.points ?? [0, 0, 0, 0];
+    const pts =
+      shape.points && shape.points.length > 0
+        ? shape.points
+        : [0, 0, 0, 0];
     const xs = pts.filter((_, i) => i % 2 === 0);
     const ys = pts.filter((_, i) => i % 2 === 1);
     left = shape.x + Math.min(...xs);
