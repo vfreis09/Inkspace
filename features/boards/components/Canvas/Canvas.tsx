@@ -149,7 +149,7 @@ export default function Canvas({
     if (editingText?.id) keep.add(editingText.id);
     const pad = CULL_PADDING_PX / camera.scale;
     return orderedShapes.filter((s) => keep.has(s.id) || isShapeInViewport(s, viewport, pad));
-  }, [orderedShapes, viewport, selectedIds, editingText?.id, camera.scale]);
+  }, [orderedShapes, viewport, selectedIds, editingText, camera.scale]);
 
   const bigSelectionBox = useMemo(() => {
     if (selectedIds.length <= MAX_TRANSFORMER_NODES) return null;

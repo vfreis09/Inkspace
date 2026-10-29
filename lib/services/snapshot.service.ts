@@ -1,12 +1,16 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 const MAX_SNAPSHOTS_PER_BOARD = 20;
 
-export async function createSnapshot(boardId: string, shapes: unknown[]) {
+export async function createSnapshot(
+  boardId: string,
+  shapes: Prisma.InputJsonValue,
+) {
   const snapshot = await prisma.boardSnapshot.create({
     data: {
       boardId,
-      shapesJson: shapes as any, // Prisma's Json type accepts any serializable value
+      shapesJson: shapes,
     },
   });
 

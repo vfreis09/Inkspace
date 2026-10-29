@@ -43,7 +43,11 @@ export async function apiCreateBoard(name: string, isPublic: boolean) {
 
 export async function apiUpdateBoard(
   boardId: string,
-  data: { name?: string; isPublic?: boolean },
+  data: {
+    name?: string;
+    isPublic?: boolean;
+    inviteRole?: "editor" | "viewer";
+  },
 ) {
   const res = await fetch(`${BASE}/boards/${boardId}`, {
     ...baseOptions(),

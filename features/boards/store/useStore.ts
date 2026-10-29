@@ -145,15 +145,19 @@ export const useStore = create<CanvasState>((set, get) => ({
         canRedo: false,
         isBoardLoading: false,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to load board";
+
       const message =
-        err?.message === "FORBIDDEN"
+        errorMessage === "FORBIDDEN"
           ? "This board is private. Use an invite link."
-          : err?.message === "NOT_FOUND"
+          : errorMessage === "NOT_FOUND"
             ? "Board not found."
-            : err?.message === "Failed to fetch shapes"
+            : errorMessage === "Failed to fetch shapes"
               ? "Failed to load board."
-              : err?.message || "Failed to load board";
+              : errorMessage;
+
       set({ boardError: message, isBoardLoading: false });
     }
   },
@@ -276,13 +280,11 @@ export const useStore = create<CanvasState>((set, get) => ({
 
       if (!addToHistory) return { shapes: newShapes };
 
-      const oldProps = Object.keys(props).reduce(
-        (acc, key) => ({
-          ...acc,
-          [key]: (original as any)[key],
-        }),
-        {},
-      );
+      const oldProps: Partial<Shape> = {};
+
+      for (const key of Object.keys(props) as (keyof Shape)[]) {
+        oldProps[key] = original[key] as never;
+      }
 
       const action: Action = { type: "UPDATE", id, oldProps, newProps: props };
 

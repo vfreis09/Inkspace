@@ -33,6 +33,8 @@ export type RemoteCursor = {
   y: number;
 };
 
+type CursorInitPayload = Omit<RemoteCursor, "connectionId">;
+
 export function getGuestIdentity() {
   const stored = localStorage.getItem("guest_identity");
   if (stored) return JSON.parse(stored);
@@ -155,14 +157,14 @@ export function usePartyKit(
 
       switch (msg.type) {
         case "cursors:init":
-          Object.entries(msg.cursors).forEach(([connId, c]: any) => {
+          Object.entries(
+            msg.cursors as Record<string, CursorInitPayload>,
+          ).forEach(([connId, cursor]) => {
             cursorsRef.current.set(connId, {
               connectionId: connId,
-              ...c,
+              ...cursor,
             });
           });
-          emitPresence();
-          break;
 
         case "user:join":
           cursorsRef.current.set(msg.connectionId, {

@@ -4,6 +4,7 @@ import {
   getSnapshotById,
 } from "@/lib/services/snapshot.service";
 import { prisma } from "@/lib/prisma";
+import type { Shape } from "@/features/boards/store/useStore";
 
 export async function listSnapshotsForBoard(boardId: string, userId: string) {
   const role = await getMemberRole(boardId, userId);
@@ -26,7 +27,7 @@ export async function restoreSnapshotForBoard(
     return { ok: false, error: "not_found" };
   }
 
-  const restoredShapes = snapshot.shapesJson as any[];
+  const restoredShapes = snapshot.shapesJson as Shape[];
 
   // Replace current shapes with the snapshot's contents, in one transaction
   await prisma.$transaction([

@@ -62,7 +62,7 @@ export function InviteDialog({ boardId }: { boardId: string }) {
       if (snapshotsRes.ok) {
         setSnapshots(await snapshotsRes.json());
       }
-    } catch (err) {
+    } catch {
       setError("Failed to load board details");
     } finally {
       setIsLoading(false);
@@ -105,7 +105,7 @@ export function InviteDialog({ boardId }: { boardId: string }) {
 
   async function updateInviteRole(next: "editor" | "viewer") {
     try {
-      await apiUpdateBoard(boardId, { inviteRole: next } as any);
+      await apiUpdateBoard(boardId, { inviteRole: next });
       setBoard((b) => (b ? { ...b, inviteRole: next } : b));
     } catch {
       setError("Failed to update link role");

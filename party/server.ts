@@ -1,5 +1,6 @@
 import type * as Party from "partykit/server";
 import { verifyPartyToken } from "@/lib/partyToken";
+import type { Shape } from "@/features/boards/store/useStore";
 
 const SECRET = process.env.PARTYKIT_SECRET || "development_secret";
 
@@ -15,8 +16,8 @@ type CursorState = {
 
 type ClientMessage =
   | { type: "user:rename"; name: string }
-  | { type: "shape:add"; shape: any }
-  | { type: "shape:update"; shapeId: string; props: object }
+  | { type: "shape:add"; shape: Shape }
+  | { type: "shape:update"; shapeId: string; props: Partial<Shape> }
   | { type: "shape:delete"; ids: string[] }
   | { type: "cursor:move"; x: number; y: number }
   | {
@@ -28,20 +29,22 @@ type ClientMessage =
       isGuest?: boolean;
       token?: string;
     }
-  | { type: "shapes:sync"; shapes: any[] };
+  | { type: "shapes:sync"; shapes: Shape[] };
+
+type PendingShape = Partial<Shape> & Pick<Shape, "id">;
 
 export default class InkspaceParty implements Party.Server {
   private cursors = new Map<string, CursorState>();
   private roles = new Map<string, "owner" | "editor" | "viewer" | null>();
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
-  private pendingUpserts = new Map<string, any>();
+  private pendingUpserts = new Map<string, PendingShape>();
   private pendingDeletes = new Set<string>();
   private flushCount = 0;
   private readonly SNAPSHOT_EVERY_N_FLUSHES = 10;
   private flushing = false;
   private retryDelay = 1000;
   private failedAttempts = 0;
-  private deadLetter: { upserts: any[]; deletes: string[] }[] = [];
+  private deadLetter: { upserts: PendingShape[]; deletes: string[] }[] = [];
   private readonly MAX_RETRY_DELAY = 30000;
   private readonly MAX_FAILED_ATTEMPTS = 5;
 
@@ -74,14 +77,20 @@ export default class InkspaceParty implements Party.Server {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    const body = await req.json() as
-      | { type?: undefined; shapes: any[] } // legacy shape: { shapes } with no `type` field
-      | { type: "shapes:sync"; shapes: any[] }
-      | { type: "role:update"; userId: string; role: "owner" | "editor" | "viewer" | null };
+    const body = (await req.json()) as
+      | { type?: undefined; shapes: Shape[] }
+      | { type: "shapes:sync"; shapes: Shape[] }
+      | {
+          type: "role:update";
+          userId: string;
+          role: "owner" | "editor" | "viewer" | null;
+        };
 
     // Backward-compat: your existing snapshot-restore push sends { shapes } with no `type`
     if (!("type" in body) || body.type === "shapes:sync") {
-      this.room.broadcast(JSON.stringify({ type: "shapes:sync", shapes: (body as any).shapes }));
+      this.room.broadcast(
+        JSON.stringify({ type: "shapes:sync", shapes: body.shapes }),
+      );
       return new Response("ok", { status: 200 });
     }
 
