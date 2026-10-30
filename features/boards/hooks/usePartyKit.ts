@@ -166,6 +166,9 @@ export function usePartyKit(
             });
           });
 
+          emitPresence();
+          break;
+
         case "user:join":
           cursorsRef.current.set(msg.connectionId, {
             connectionId: msg.connectionId,

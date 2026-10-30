@@ -251,7 +251,7 @@ export default function BoardPage({
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-[11px] font-black text-white uppercase">
-                    {u.name.charAt(0)}
+                    {u.name?.charAt(0) || "?"}
                   </div>
                 )}
               </div>
