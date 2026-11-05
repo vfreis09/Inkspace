@@ -107,11 +107,7 @@ Inkspace is a web-based infinite canvas built on Konva. It implements its own in
 - **Collaboration:** Sharing, permissions, snapshots / version history
 - **Advanced tools:** Pen, text, layers, alignment guides
 - **Polish:** Keyboard shortcuts, PNG export, dark mode, zoom-to-fit, coordinate HUD
-- **Performance improvements:** Viewport culling, layer separation, render isolation, and batched database writes. Before-and-after measurements are documented below.
-
-### In progress 🚧
-
-- **Further performance tuning:** Improving zoom performance on boards with large numbers of shapes.
+- **Performance improvements:** Viewport culling, layer separation, render isolation (including a ref-driven coordinate HUD so mouse movement doesn't re-render the canvas), and batched database writes. Before-and-after measurements are documented below.
 
 ### Planned 📋
 
@@ -119,6 +115,7 @@ Inkspace is a web-based infinite canvas built on Konva. It implements its own in
 - Real-time comments
 - Replace browser alerts and prompts with modals
 - Unit tests for layer, snapping, and culling logic
+- Further zoom performance work on very large boards (see Performance)
 
 ### Intentionally out of scope
 
@@ -137,9 +134,12 @@ Performance was measured using production builds, comparing the application befo
 - **Browser:** Google Chrome 150.0.7871.114 (64-bit)
 - **Build:** Production (`npm run build` followed by `npm run start`)
 - **Measurement:** Chrome DevTools → Rendering → Frame Rendering Stats
-- **Test data:** A random mix of rectangles, circles, lines, arrows, and freehand strokes (82 points each), spread over ±4,000 world units.
+- **Test data:** A random mix of rectangles, circles, lines, arrows, and freehand strokes (81 points each), spread over ±4,000 world units.
+- **Zoom test:** Wheel zoom from 100% out toward the minimum, where the most shapes are on screen.
 
-The same machine, browser, viewport, shape counts, and interaction scenarios were used for both measurements. Each cell represents a single measurement, so results are approximate and may vary between runs.
+The same machine, browser, viewport, shape counts, and interaction scenarios were used for both measurements.
+
+**How to read these numbers:** each cell is a single reading of Chrome's frame meter, taken as an average over the test. Readings vary noticeably between runs, and FPS tends to start low and climb as the page warms up. Treat the table as approximate and the before/after comparison as directional. Differences of a few percent (for example the 0-shape rows) are within noise.
 
 ### Before vs. after optimization
 
@@ -163,7 +163,7 @@ The work included:
 
 - **Viewport culling:** Avoid rendering shapes outside the visible canvas area.
 - **Layer separation:** Separate rendering responsibilities to reduce unnecessary redraws.
-- **Render isolation:** Reduce unnecessary component re-renders during canvas interactions.
+- **Render isolation:** Reduce unnecessary component re-renders during canvas interactions. For example, the coordinate HUD writes pointer coordinates straight to the DOM through a ref instead of React state.
 - **Batched database writes:** Group changes before persisting them to reduce database write frequency.
 
 The results show the greatest improvements under heavier workloads:
@@ -172,7 +172,9 @@ The results show the greatest improvements under heavier workloads:
 - Panning with 2,000 shapes improved from 36 to 50 FPS (+39%).
 - Dragging one shape with 2,000 shapes improved from 28 to 58 FPS (+107%).
 
-Zooming remains the main area for further performance improvements.
+### Remaining work
+
+Zooming is still the slowest interaction on large boards. The likely cause is that zooming out brings hundreds of shapes into view at once, so many shape components mount in a single step. Possible fixes are rendering a larger region than the viewport and recomputing it less often, throttling wheel events to one update per frame, and disabling the hit canvas during zoom. These were left out on purpose: the current performance is acceptable at typical board sizes, and the gain didn't justify the added complexity.
 
 ## 🎯 Goals
 
@@ -190,7 +192,7 @@ This project demonstrates:
 - Undo/redo history is local to each user and is cleared on reload.
 - Alignment guides snap against the dragged shape only, not the bounding box of a multi-selection.
 - Rect-select and bounding boxes don't account for rotation.
-- Zoom performance still degrades on large boards, although optimization has significantly improved it. See the Performance section.
+- Zoom is the slowest interaction on large boards (about 28 FPS at 2,000 shapes in my tests). See the Performance section.
 
 ## 🛠️ Getting Started
 
