@@ -214,6 +214,13 @@ export default function Canvas({
     img.src = canvas.toDataURL();
   }, [palette.gridLine, palette.gridDot]);
 
+  const showTransformer =
+    selectedIds.length > 0 &&
+    selectedIds.length <= MAX_TRANSFORMER_NODES &&
+    canEdit &&
+    !editingText &&
+    currentTool === "select";
+
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage || !trRef.current) return;
@@ -222,7 +229,7 @@ export default function Canvas({
       .filter((n): n is KonvaNode => !!n);
     trRef.current.nodes(nodes);
     trRef.current.getLayer()?.batchDraw();
-  }, [selectedIds]);
+  }, [selectedIds, showTransformer]);
 
   const broadcastAction = useCallback(
     (action: Action, isUndo: boolean) => {

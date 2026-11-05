@@ -52,6 +52,7 @@ export const MemoizedShape = React.memo(
       strokeWidth,
       strokeScaleEnabled: false,
       rotation,
+      listening: isSelectMode,
       draggable: isSelectMode && canEdit,
       onDragMove,
       onDragEnd,
