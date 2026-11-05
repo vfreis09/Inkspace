@@ -7,7 +7,6 @@ import type { KonvaEventObject } from "konva/lib/Node";
 
 interface MemoizedShapeProps {
   shape: Shape;
-  isSelected: boolean;
   isSelectMode: boolean;
   canEdit: boolean;
   isEditing?: boolean;
@@ -140,7 +139,6 @@ export const MemoizedShape = React.memo(
   },
   (prev, next) =>
     prev.shape === next.shape &&
-    prev.isSelected === next.isSelected &&
     prev.isSelectMode === next.isSelectMode &&
     prev.canEdit === next.canEdit &&
     prev.isEditing === next.isEditing &&

@@ -1014,7 +1014,6 @@ export default function Canvas({
             <MemoizedShape
               key={s.id}
               shape={s}
-              isSelected={selectedIds.includes(s.id)}
               isSelectMode={currentTool === "select"}
               canEdit={canEdit}
               isEditing={editingText?.id === s.id}
@@ -1051,7 +1050,6 @@ export default function Canvas({
             <MemoizedShape
               key="preview"
               shape={{ ...(localCurrentShape as Shape), id: "preview" }}
-              isSelected={false}
               isSelectMode={false}
               canEdit={canEdit}
               onDragStart={() => {}}
