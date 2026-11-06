@@ -113,6 +113,12 @@ export default function Canvas({
     height: number;
   } | null>(null);
 
+  const cancelDrawing = useCallback(() => {
+    setDrawStart(null);
+    setLocalCurrentShape(null);
+    setSelectionRect(null);
+  }, []);
+
   const stageRef = useRef<KonvaStage | null>(null);
   const trRef = useRef<KonvaTransformer | null>(null);
 
@@ -291,6 +297,7 @@ export default function Canvas({
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "TEXTAREA" || tag === "INPUT") return;
+      if (e.key === "Escape") cancelDrawing();
 
       if (
         canEdit &&
@@ -780,13 +787,15 @@ export default function Canvas({
   const handleMouseUp = () => {
     if (selectionRect) {
       const overlapping = shapes
-        .filter(
-          (s) =>
-            s.x >= selectionRect.x &&
-            s.x + s.width <= selectionRect.x + selectionRect.width &&
-            s.y >= selectionRect.y &&
-            s.y + s.height <= selectionRect.y + selectionRect.height,
-        )
+        .filter((s) => {
+          const b = getShapeBounds(s);
+          return (
+            b.left >= selectionRect.x &&
+            b.right <= selectionRect.x + selectionRect.width &&
+            b.top >= selectionRect.y &&
+            b.bottom <= selectionRect.y + selectionRect.height
+          );
+        })
         .map((s) => s.id);
         const currentSelection = useStore.getState().selectedIds;
       selectShapes(
@@ -819,6 +828,24 @@ export default function Canvas({
       }
     setDrawStart(null);
   };
+
+  const mouseUpRef = useRef<() => void>(() => {});
+  useLayoutEffect(() => {
+    mouseUpRef.current = handleMouseUp;
+  });
+
+  useEffect(() => {
+    const onUp = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      mouseUpRef.current();
+    };
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("blur", cancelDrawing);
+    return () => {
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", cancelDrawing);
+    };
+  }, [cancelDrawing]);
 
   const handleResetCamera = useCallback(() => {
     setCamera({ x: 0, y: 0, scale: 1 });
@@ -986,7 +1013,6 @@ export default function Canvas({
         draggable={currentTool === "pan"}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
         onContextMenu={(e) => e.evt.preventDefault()}
         onWheel={(e) => {
           e.evt.preventDefault();
