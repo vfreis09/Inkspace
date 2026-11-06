@@ -796,15 +796,27 @@ export default function Canvas({
       );
       setSelectionRect(null);
     } else if (canEdit && localCurrentShape) {
-      const shape: Shape = {
-        ...(localCurrentShape as Shape),
-        id: crypto.randomUUID(),
-        order: useStore.getState().getNextOrder(),
-      };
-      setLocalCurrentShape(null);
-      addShapeLocally(shape);
-      onShapeAdd?.(shape);
-    }
+        const minSize = 3 / camera.scale;
+        const s = localCurrentShape;
+        const pts = s.points ?? [];
+        const tooSmall =
+          s.type === "rect" || s.type === "circle"
+            ? (s.width ?? 0) < minSize && (s.height ?? 0) < minSize
+            : s.type === "pen"
+              ? pts.length < 4
+              : Math.hypot(pts[2] ?? 0, pts[3] ?? 0) < minSize;
+
+        setLocalCurrentShape(null);
+        if (!tooSmall) {
+          const shape: Shape = {
+            ...(s as Shape),
+            id: crypto.randomUUID(),
+            order: useStore.getState().getNextOrder(),
+          };
+          addShapeLocally(shape);
+          onShapeAdd?.(shape);
+        }
+      }
     setDrawStart(null);
   };
 
