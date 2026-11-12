@@ -1,26 +1,38 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState, useMemo } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useCallback,
+  useState,
+  useMemo,
+} from "react";
 import PartySocket from "partysocket";
 import { useUser } from "@clerk/nextjs";
-import { useStore, Shape } from "@/features/boards/store/useStore";
+import { useStore } from "@/features/boards/store/useStore";
+import { apiFetchShapes } from "@/features/boards/services/boardApi";
+
+type Role = "owner" | "editor" | "viewer";
+export type ConnectionStatus = "connecting" | "online" | "offline";
+
+const USER_COLORS = [
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#06b6d4",
+  "#6366f1",
+  "#a855f7",
+  "#ec4899",
+];
 
 function userColor(userId: string): string {
-  const colors = [
-    "#ef4444",
-    "#f97316",
-    "#eab308",
-    "#22c55e",
-    "#06b6d4",
-    "#6366f1",
-    "#a855f7",
-    "#ec4899",
-  ];
   let hash = 0;
   for (let i = 0; i < userId.length; i++) {
     hash = userId.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return colors[Math.abs(hash) % colors.length];
+  return USER_COLORS[Math.abs(hash) % USER_COLORS.length];
 }
 
 export type RemoteCursor = {
@@ -36,13 +48,21 @@ export type RemoteCursor = {
 type CursorInitPayload = Omit<RemoteCursor, "connectionId">;
 
 export function getGuestIdentity() {
-  const stored = localStorage.getItem("guest_identity");
-  if (stored) return JSON.parse(stored);
+  try {
+    const stored = localStorage.getItem("guest_identity");
+    if (stored) return JSON.parse(stored);
+  } catch {
+    /* fall through and create a new identity */
+  }
   const identity = {
     id: `guest_${crypto.randomUUID()}`,
     name: `Guest #${Math.floor(Math.random() * 9000) + 1000}`,
   };
-  localStorage.setItem("guest_identity", JSON.stringify(identity));
+  try {
+    localStorage.setItem("guest_identity", JSON.stringify(identity));
+  } catch {
+    /* storage unavailable: identity lives for this page only */
+  }
   return identity;
 }
 
@@ -50,122 +70,215 @@ export function usePartyKit(
   boardId: string,
   onCursorUpdate: (cursors: RemoteCursor[]) => void,
 ) {
-  const { user } = useUser();
-  const socketRef = useRef<PartySocket | null>(null);
-  const cursorsRef = useRef<Map<string, RemoteCursor>>(new Map());
-  const [activeUsers, setActiveUsers] = useState<RemoteCursor[]>([]);
-  const [role, setRole] = useState<"owner" | "editor" | "viewer" | null>(null);
-  const [wasKicked, setWasKicked] = useState(false);
+  const { user, isLoaded } = useUser();
 
+  const socketRef = useRef<PartySocket | null>(null);
+  const joinedRef = useRef(false);
+  const hasJoinedBeforeRef = useRef(false);
+  const cursorsRef = useRef<Map<string, RemoteCursor>>(new Map());
   const lastCursorPositionRef = useRef<{ x: number; y: number } | null>(null);
   const cursorFrameRef = useRef<number | null>(null);
 
-  const addShapeFromRemote = useStore((s) => s.addShapeFromRemote);
-  const updateShapeFromRemote = useStore((s) => s.updateShapeFromRemote);
-  const deleteShapesFromRemote = useStore((s) => s.deleteShapesFromRemote);
+  const [activeUsers, setActiveUsers] = useState<RemoteCursor[]>([]);
+  const [role, setRole] = useState<Role | null>(null);
+  const [status, setStatus] = useState<ConnectionStatus>("connecting");
+  const [wasKicked, setWasKicked] = useState(false);
+  const [guestNameOverride, setGuestNameOverride] = useState<string | null>(null);
 
   const guestIdentity = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    return user ? null : getGuestIdentity();
-  }, [user]);
+    if (typeof window === "undefined" || !isLoaded || user) return null;
+    return getGuestIdentity();
+  }, [isLoaded, user]);
 
-  const userId = user?.id ?? guestIdentity?.id ?? null;
+  const isGuest = isLoaded && !user;
+  const userId = !isLoaded ? null : (user?.id ?? guestIdentity?.id ?? null);
   const userName =
     user?.fullName ?? user?.username ?? guestIdentity?.name ?? "Anonymous";
   const avatarUrl = user?.imageUrl;
-  const isGuest = !user;
+  const guestName = guestNameOverride ?? guestIdentity?.name ?? "";
 
-  const [guestName, setGuestNameState] = useState(guestIdentity?.name ?? "");
+  // Latest values for use inside socket listeners without reconnecting
+  const identityRef = useRef<{ name: string; avatarUrl?: string; isGuest: boolean }>({
+    name: "",
+    isGuest: false,
+  });
+  const onCursorUpdateRef = useRef(onCursorUpdate);
+  useLayoutEffect(() => {
+    identityRef.current = {
+      name: isGuest ? guestName || userName : userName,
+      avatarUrl,
+      isGuest,
+    };
+    onCursorUpdateRef.current = onCursorUpdate;
+  });
 
   const setGuestName = useCallback(
     (name: string) => {
       if (!guestIdentity) return;
-      const updated = { ...guestIdentity, name };
-      localStorage.setItem("guest_identity", JSON.stringify(updated));
-      setGuestNameState(name);
-      socketRef.current?.send(
-        JSON.stringify({
-          type: "user:rename",
-          name,
-        }),
-      );
+      try {
+        localStorage.setItem(
+          "guest_identity",
+          JSON.stringify({ ...guestIdentity, name }),
+        );
+      } catch {
+        /* ignore */
+      }
+      setGuestNameOverride(name);
+      if (joinedRef.current) {
+        socketRef.current?.send(JSON.stringify({ type: "user:rename", name }));
+      }
     },
     [guestIdentity],
   );
 
-  const emitCursors = useCallback(() => {
-    const byUser = new Map<string, RemoteCursor>();
-    for (const c of cursorsRef.current.values()) byUser.set(c.userId, c);
-    const othersOnly = Array.from(byUser.values()).filter(
-      (c) => (userId && c.userId !== userId) || !userId,
-    );
-    onCursorUpdate(othersOnly);
-  }, [onCursorUpdate, userId]);
-
-  const emitPresence = useCallback(() => {
-    const byUser = new Map<string, RemoteCursor>();
-    for (const c of cursorsRef.current.values()) byUser.set(c.userId, c);
-    setActiveUsers(Array.from(byUser.values()));
-    emitCursors();
-  }, [emitCursors]);
-
   useEffect(() => {
     if (!boardId || !userId) return;
+
     let cancelled = false;
-    let localSocket: PartySocket | null = null;
+    let emitFrame: number | null = null;
+    let refetchTimer: ReturnType<typeof setTimeout> | undefined;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
-    async function connect() {
-      const res = await fetch(`/api/boards/${boardId}/party-token`, {
-        credentials: "include",
+    const dedupedByUser = () => {
+      const byUser = new Map<string, RemoteCursor>();
+      for (const c of cursorsRef.current.values()) byUser.set(c.userId, c);
+      return Array.from(byUser.values());
+    };
+
+    const emitCursors = () => {
+      onCursorUpdateRef.current(
+        dedupedByUser().filter(
+          (c) => c.userId !== userId && (c.x !== 0 || c.y !== 0),
+        ),
+      );
+    };
+
+    const scheduleEmit = () => {
+      if (emitFrame != null) return;
+      emitFrame = requestAnimationFrame(() => {
+        emitFrame = null;
+        emitCursors();
       });
-      if (!res.ok || cancelled) return;
-      const { token, role: fetchedRole } = await res.json();
-      if (cancelled) return; 
+    };
 
-      setRole(fetchedRole);
+    const emitPresence = () => {
+      setActiveUsers(dedupedByUser());
+      emitCursors();
+    };
 
-      const socket = new PartySocket({
-        host: process.env.NEXT_PUBLIC_PARTYKIT_HOST ?? "localhost:1999",
-        room: boardId,
-      });
+    const socket = new PartySocket({
+      host: process.env.NEXT_PUBLIC_PARTYKIT_HOST ?? "localhost:1999",
+      room: boardId,
+    });
+    socketRef.current = socket;
 
-      if (cancelled) { // NEW: guard against connecting after cancellation
-        socket.close();
-        return;
-      }
+    const retryLater = () => {
+      retryTimer = setTimeout(() => {
+        if (!cancelled) socket.reconnect();
+      }, 3000);
+    };
 
-      localSocket = socket;
+    socket.addEventListener("open", async () => {
+      joinedRef.current = false;
+      try {
+        // A fresh token on EVERY open: tokens live 5 minutes.
+        const res = await fetch(`/api/boards/${boardId}/party-token`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (cancelled) return;
 
-      socketRef.current = socket;
+        if (res.status === 403 || res.status === 404) {
+          setWasKicked(true); // access revoked, or the board is gone
+          socket.close();
+          return;
+        }
+        if (!res.ok) {
+          retryLater();
+          return;
+        }
 
-      socket.addEventListener("open", () => {
+        const { token } = await res.json();
+        if (cancelled) return;
+
+        const id = identityRef.current;
         socket.send(
           JSON.stringify({
             type: "user:join",
             userId,
-            name: guestName || userName,
-            avatarUrl,
+            name: id.name,
+            avatarUrl: id.avatarUrl,
             color: userColor(userId),
-            isGuest,
+            isGuest: id.isGuest,
             token,
           }),
         );
-      });
+      } catch {
+        if (!cancelled) retryLater();
+      }
+    });
 
-      socket.addEventListener("message", (event) => {
-        const msg = JSON.parse(event.data);
+    socket.addEventListener("close", () => {
+      joinedRef.current = false;
+      cursorsRef.current.clear();
+      if (cancelled) return;
+      setStatus("offline");
+      setActiveUsers([]);
+      onCursorUpdateRef.current([]);
+    });
+
+    socket.addEventListener("message", (event) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let msg: Record<string, any>;
+      try {
+        msg = JSON.parse(event.data);
+      } catch {
+        return;
+      }
 
       switch (msg.type) {
-        case "cursors:init":
-          Object.entries(
-            msg.cursors as Record<string, CursorInitPayload>,
-          ).forEach(([connId, cursor]) => {
-            cursorsRef.current.set(connId, {
-              connectionId: connId,
-              ...cursor,
-            });
-          });
+        case "join:ok": {
+          setRole(msg.role);
+          const goOnline = () => {
+            joinedRef.current = true;
+            setStatus("online");
+          };
 
+          if (!hasJoinedBeforeRef.current) {
+            hasJoinedBeforeRef.current = true;
+            goOnline();
+            break;
+          }
+
+          // Re-connect: we may have missed edits. Stay read-only, wait for the
+          // server's 1 s save window, then reload the board from the database.
+          setStatus("connecting");
+          clearTimeout(refetchTimer);
+          refetchTimer = setTimeout(async () => {
+            try {
+              const shapes = await apiFetchShapes(boardId);
+              if (!cancelled) {
+                useStore.setState((s) => ({
+                  shapes,
+                  selectedIds: s.selectedIds.filter((sid) =>
+                    shapes.some((x: { id: string }) => x.id === sid),
+                  ),
+                }));
+              }
+            } catch {
+              /* keep what we have */
+            }
+            if (!cancelled) goOnline();
+          }, 1500);
+          break;
+        }
+
+        case "cursors:init":
+          for (const [connId, cursor] of Object.entries(
+            msg.cursors as Record<string, CursorInitPayload>,
+          )) {
+            cursorsRef.current.set(connId, { connectionId: connId, ...cursor });
+          }
           emitPresence();
           break;
 
@@ -187,65 +300,81 @@ export function usePartyKit(
           emitPresence();
           break;
 
-        case "cursor:move":
+        case "cursor:move": {
           const existing = cursorsRef.current.get(msg.connectionId);
           if (existing) {
             existing.x = msg.x;
             existing.y = msg.y;
+            scheduleEmit();
           }
-          emitCursors();
           break;
+        }
 
-        case "shape:add":
-          addShapeFromRemote(msg.shape);
-          break;
-
-        case "shape:update":
-          updateShapeFromRemote(msg.shapeId, msg.props);
-          break;
-
-        case "shape:delete":
-          deleteShapesFromRemote(msg.ids);
-          break;
-
-        case "shapes:sync":
-          useStore.setState({ shapes: msg.shapes });
-          break;
-        
-        case "role:update":
-          setRole(msg.role);
-          break;
-
-        case "user:rename":
+        case "user:rename": {
           const toRename = cursorsRef.current.get(msg.connectionId);
           if (toRename) {
             toRename.name = msg.name;
             emitPresence();
           }
           break;
+        }
+
+        case "shape:add":
+          useStore.getState().addShapeFromRemote(msg.shape);
+          break;
+
+        case "shape:update":
+          useStore.getState().updateShapeFromRemote(msg.shapeId, msg.props);
+          break;
+
+        case "shape:delete":
+          useStore.getState().deleteShapesFromRemote(msg.ids);
+          break;
+
+        case "shapes:sync":
+          // Snapshot restore: old undo history refers to shapes that may no
+          // longer exist, so reset it together with the selection.
+          useStore.setState({
+            shapes: msg.shapes,
+            selectedIds: [],
+            history: { past: [], future: [] },
+            canUndo: false,
+            canRedo: false,
+          });
+          break;
+
+        case "role:update":
+          setRole(msg.role);
+          break;
 
         case "kicked":
           setWasKicked(true);
           break;
       }
-      });
-    }
+    });
 
-      connect();
-      return () => { cancelled = true; 
-        localSocket?.close(); 
-        cursorsRef.current.clear();
-        socketRef.current?.close(); };
-    }, [boardId, userId, addShapeFromRemote, updateShapeFromRemote, deleteShapesFromRemote, emitPresence, emitCursors]);
+    return () => {
+      cancelled = true;
+      clearTimeout(refetchTimer);
+      clearTimeout(retryTimer);
+      if (emitFrame != null) cancelAnimationFrame(emitFrame);
+      socket.close();
+      if (socketRef.current === socket) socketRef.current = null;
+      joinedRef.current = false;
+      hasJoinedBeforeRef.current = false;
+      cursorsRef.current.clear();
+    };
+  }, [boardId, userId]);
+
+  // ---- outgoing ---------------------------------------------------------------
 
   const flushCursor = useCallback(() => {
-    if (!socketRef.current || !lastCursorPositionRef.current) {
-      cursorFrameRef.current = null;
-      return;
-    }
-    const { x, y } = lastCursorPositionRef.current;
-    socketRef.current.send(JSON.stringify({ type: "cursor:move", x, y }));
     cursorFrameRef.current = null;
+    const pos = lastCursorPositionRef.current;
+    if (!joinedRef.current || !pos) return;
+    socketRef.current?.send(
+      JSON.stringify({ type: "cursor:move", x: pos.x, y: pos.y }),
+    );
   }, []);
 
   const sendCursor = useCallback(
@@ -258,28 +387,47 @@ export function usePartyKit(
     [flushCursor],
   );
 
-  const sendShapeAdd = useCallback((shape: object) => {
-    socketRef.current?.send(JSON.stringify({ type: "shape:add", shape }));
+  useEffect(() => {
+    return () => {
+      if (cursorFrameRef.current != null) {
+        cancelAnimationFrame(cursorFrameRef.current);
+      }
+    };
   }, []);
 
-  const sendShapeUpdate = useCallback((shapeId: string, props: object) => {
-    socketRef.current?.send(
-      JSON.stringify({ type: "shape:update", shapeId, props }),
-    );
+  // Messages are only sent once the server has accepted our join, so nothing
+  // gets queued by the socket and replayed before user:join.
+  const send = useCallback((payload: object) => {
+    if (!joinedRef.current) return;
+    socketRef.current?.send(JSON.stringify(payload));
   }, []);
 
-  const sendShapeDelete = useCallback((ids: string[]) => {
-    socketRef.current?.send(JSON.stringify({ type: "shape:delete", ids }));
-  }, []);
-
-  const sendFullSync = useCallback((shapes: Shape[]) => {
-    socketRef.current?.send(JSON.stringify({ type: "shapes:sync", shapes }));
-  }, []);
+  const sendShapeAdd = useCallback(
+    (shape: object) => send({ type: "shape:add", shape }),
+    [send],
+  );
+  const sendShapeUpdate = useCallback(
+    (shapeId: string, props: object) =>
+      send({ type: "shape:update", shapeId, props }),
+    [send],
+  );
+  const sendShapeDelete = useCallback(
+    (ids: string[]) => send({ type: "shape:delete", ids }),
+    [send],
+  );
 
   return {
-  activeUsers, isGuest, guestName, setGuestName,
-  sendCursor, sendShapeAdd, sendShapeUpdate, sendShapeDelete, sendFullSync,
-  role,
-  canEdit: role === "owner" || role === "editor",
-  wasKicked,
-}}
+    activeUsers,
+    isGuest,
+    guestName,
+    setGuestName,
+    sendCursor,
+    sendShapeAdd,
+    sendShapeUpdate,
+    sendShapeDelete,
+    role,
+    status,
+    canEdit: status === "online" && (role === "owner" || role === "editor"),
+    wasKicked,
+  };
+}

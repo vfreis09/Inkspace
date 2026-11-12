@@ -101,8 +101,8 @@ export async function updateShape(
       ...(data.strokeWidth !== undefined && { strokeWidth: data.strokeWidth }),
       ...(data.points !== undefined && { points: data.points }),
       ...(data.order !== undefined && { order: data.order }),
-      ...(data.text !== undefined && { text: data.text }),           // NEW
-      ...(data.fontSize !== undefined && { fontSize: data.fontSize }), // NEW
+      ...(data.text !== undefined && { text: data.text }),
+      ...(data.fontSize !== undefined && { fontSize: data.fontSize }),
       lastEditedBy: userId,
     },
   });
@@ -223,6 +223,10 @@ export async function batchUpsertShapes(
             ...(s.rotation !== undefined && { rotation: s.rotation }),
             ...(s.strokeWidth !== undefined && { strokeWidth: s.strokeWidth }),
             ...(s.order !== undefined && { order: s.order }),
+            ...(s.fill !== undefined && { fill: s.fill }),
+            ...(s.stroke !== undefined && { stroke: s.stroke }),
+            ...(s.text !== undefined && { text: s.text }),
+            ...(s.fontSize !== undefined && { fontSize: s.fontSize }),
           },
         });
       }

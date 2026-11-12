@@ -9,7 +9,7 @@ import {
   type BatchInput,
 } from "@/lib/services/shape.service";
 import { resolveAccess } from "@/lib/services/board.service";
-import { createSnapshot } from "../services/snapshot.service";
+import { createSnapshot, getLatestSnapshotTime } from "../services/snapshot.service";
 
 export async function listShapesForBoard(boardId: string, userId: string | null) {
   const { board, role } = await resolveAccess(boardId, userId);
@@ -39,24 +39,31 @@ export async function deleteShapeFromBoard(boardId: string, shapeId: string, use
   await deleteShape(shapeId);
   return { ok: true };
 }
+async function snapshotBeforeWrite(boardId: string) {
+  try {
+    const latest = await getLatestSnapshotTime(boardId);
+    if (latest && Date.now() - latest.getTime() < 5 * 60 * 1000) return;
+    const current = await getShapesByBoardId(boardId);
+    if (current.length > 0) await createSnapshot(boardId, current);
+  } catch (err) {
+    console.error("Snapshot failed (continuing with the save):", err);
+  }
+}
+
 export async function batchUpsertForBoard(
   boardId: string,
   userId: string,
   shapes: BatchInput[],
   deletedIds: string[],
-  shouldSnapshot: boolean = false, // NEW
+  _shouldSnapshot: boolean = false, // ignored now, kept so the route doesn't change
 ) {
   if (userId !== "system_partykit") {
     const { role } = await resolveAccess(boardId, userId);
     if (!role || role === "viewer") return { ok: false, error: "forbidden" };
   }
 
+  await snapshotBeforeWrite(boardId);
   await batchUpsertShapes(boardId, userId, shapes, deletedIds);
-
-  if (shouldSnapshot) {
-    const currentShapes = await getShapesByBoardId(boardId);
-    await createSnapshot(boardId, currentShapes);
-  }
 
   return { ok: true, upserted: shapes.length, deleted: deletedIds.length };
 }

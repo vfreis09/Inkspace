@@ -43,7 +43,7 @@ export async function restoreSnapshotForBoard(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-partykit-secret": process.env.PARTYKIT_SECRET || "development_secret",
+        "x-partykit-secret": process.env.PARTYKIT_SECRET!,
       },
       body: JSON.stringify({ shapes: restoredShapes }),
     });

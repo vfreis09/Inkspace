@@ -237,6 +237,10 @@ export default function Canvas({
     trRef.current.getLayer()?.batchDraw();
   }, [selectedIds, showTransformer]);
 
+  useEffect(() => {
+    if (!canEdit && EDIT_ONLY_TOOLS.includes(currentTool)) setTool("select");
+  }, [canEdit, currentTool, setTool]);
+
   const broadcastAction = useCallback(
     (action: Action, isUndo: boolean) => {
       switch (action.type) {
@@ -310,12 +314,12 @@ export default function Canvas({
         onShapeDelete?.(ids);
       }
 
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
+      if (canEdit && (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
         undoAndBroadcast();
       }
 
-      if (
+      if (canEdit &&
         (e.ctrlKey || e.metaKey) &&
         (e.key.toLowerCase() === "y" || (e.shiftKey && e.key.toLowerCase() === "z"))
       ) {
@@ -1113,10 +1117,7 @@ export default function Canvas({
               listening={false}
             />
           )}
-          {selectedIds.length > 0 &&
-            selectedIds.length <= MAX_TRANSFORMER_NODES &&
-            canEdit &&
-            !editingText && (
+          {showTransformer && (
               <Transformer
                 ref={trRef}
                 rotateEnabled

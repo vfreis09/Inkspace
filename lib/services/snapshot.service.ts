@@ -47,3 +47,12 @@ async function pruneOldSnapshots(boardId: string) {
     where: { id: { in: all.map((s) => s.id) } },
   });
 }
+
+export async function getLatestSnapshotTime(boardId: string): Promise<Date | null> {
+  const row = await prisma.boardSnapshot.findFirst({
+    where: { boardId },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  return row?.createdAt ?? null;
+}

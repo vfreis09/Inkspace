@@ -11,7 +11,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ boar
   if (!board) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (!role) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-  const secret = process.env.PARTYKIT_SECRET || "development_secret";
+  const secret = process.env.PARTYKIT_SECRET!;
   const token = await signPartyToken({ boardId, userId: userId ?? null, role }, secret);
 
   return NextResponse.json({ token, role });
