@@ -33,19 +33,21 @@ export default function BoardDashboard() {
   const [newBoardIsPublic, setNewBoardIsPublic] = useState(false);
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
+    if (!isLoaded) return;
+    if (isSignedIn) {
+      fetchBoards(true);
+    } else {
+      setIsLoading(false);
       openSignIn();
-    } else if (isSignedIn) {
-      fetchBoards();
     }
   }, [isLoaded, isSignedIn]);
 
-  async function fetchBoards() {
-    setIsLoading(true);
+  async function fetchBoards(showSpinner = false) {
+    if (showSpinner) setIsLoading(true);
+    setError(null);
     try {
-      const data = await apiFetchBoards();
-      setBoards(data);
-    } catch (err) {
+      setBoards(await apiFetchBoards());
+    } catch {
       setError("Failed to load boards.");
     } finally {
       setIsLoading(false);
@@ -53,8 +55,10 @@ export default function BoardDashboard() {
   }
 
   async function handleCreate() {
+    if (isCreating) return;
     const name = newBoardName.trim();
     if (!name) return;
+    setError(null);
     setIsCreating(true);
     try {
       const board = await apiCreateBoard(name, newBoardIsPublic);
@@ -107,10 +111,16 @@ export default function BoardDashboard() {
           <div className="flex justify-center py-20">
             <Loader2 className="animate-spin text-indigo-500" />
           </div>
+        ) : boards.length === 0 ? (
+          <p className="py-20 text-center text-sm text-zinc-500">
+            {isSignedIn
+              ? "No boards yet. Create your first one above."
+              : "Sign in to see your boards."}
+          </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {boards.map((board) => (
-              <BoardCard key={board.id} board={board} onAction={fetchBoards} currentUserId={user?.id}/>
+              <BoardCard key={board.id} board={board} onAction={() => fetchBoards()} currentUserId={user?.id}/>
             ))}
           </div>
         )}

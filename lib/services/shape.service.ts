@@ -160,7 +160,7 @@ export async function batchUpsertShapes(
           fontSize: s.fontSize ?? null,
         }));
         for (const part of chunk(rows, BATCH_CHUNK)) {
-          await tx.shape.createMany({ data: part });
+          await tx.shape.createMany({ data: part, skipDuplicates: true });
         }
       }
 
