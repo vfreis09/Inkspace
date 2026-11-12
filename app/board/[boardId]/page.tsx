@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, use } from "react";
+import { useEffect, use, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { User, Globe, LayoutDashboard, ChevronLeft, Send } from "lucide-react";
+import { User, Globe, LayoutDashboard, ChevronLeft, Users } from "lucide-react";
 import Toolbar from "@/features/boards/components/Toolbar/Toolbar";
 import ColorPicker from "@/features/boards/components/ColorPicker/ColorPicker";
 import { useStore } from "@/features/boards/store/useStore";
@@ -12,6 +12,7 @@ import LayerControls from "@/features/boards/components/LayerControls/LayerContr
 import ThemeToggle from "@/features/boards/components/theme/ThemeToggle";
 import { installStressTools } from "@/features/boards/utils/devStress";
 import { useCursorStore } from "@/features/boards/store/useCursorStore";
+import { InviteDialog } from "@/features/boards/components/InviteDialog/InviteDialog";
 
 
 const Canvas = dynamic(
@@ -59,12 +60,16 @@ export default function BoardPage({
     guestName,
     setGuestName,
     canEdit,
+    role,
+    status,
     wasKicked,
   } = usePartyKit(boardId, setCursors);
 
+  const [isManageOpen, setIsManageOpen] = useState(false);
+
   useEffect(() => {
     if (wasKicked) {
-      alert("You've been removed from this board by the owner.");
+      alert("You no longer have access to this board.");
       router.push("/");
     }
   }, [wasKicked, router]);
@@ -72,49 +77,6 @@ export default function BoardPage({
   useEffect(() => {
     if (boardId) loadBoard(boardId);
   }, [boardId, loadBoard]);
-
-  const handleInvite = async () => {
-    const email = prompt("Enter the email address of the user to invite:");
-    if (!email) return;
-
-    try {
-      const res = await fetch(`/api/boards/${boardId}/invite`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-
-      if (res.ok) {
-        alert("User invited successfully!");
-      } else {
-        const errorText = await res.text();
-        alert(`Failed to invite: ${errorText}`);
-      }
-    } catch (err) {
-      alert("An error occurred while inviting the user.");
-    }
-  };
-
-  const handleShare = async () => {
-    try {
-      const res = await fetch(`/api/boards/${boardId}/inviteToken`);
-
-      if (!res.ok) {
-        const text = await res.text();
-        console.error("invite-token error:", res.status, text);
-        alert(`Failed to get share link: ${res.status} ${text}`);
-        return;
-      }
-
-      const { inviteToken } = await res.json();
-      const link = `${window.location.origin}/board/${boardId}/join?invite=${inviteToken}`;
-      await navigator.clipboard.writeText(link);
-      alert("Invite link copied!");
-    } catch (err) {
-      console.error("handleShare error:", err);
-      alert("Failed to copy share link.");
-    }
-  };
 
   const hasShapes = useStore((s) => s.shapes.length > 0);
   const deleteShapesLocally = useStore((s) => s.deleteShapesLocally);
@@ -190,22 +152,19 @@ export default function BoardPage({
               </h1>
               <p className="text-[10px] text-zinc-500">Multiplayer Canvas</p>
             </div>
-            <button
-              onClick={handleShare}
-              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-indigo-500 active:scale-95"
-            >
-              <Globe size={12} />
-              SHARE
-            </button>
-            <button
-              onClick={handleInvite}
-              className="flex items-center gap-2 rounded-lg bg-zinc-700 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-zinc-600 active:scale-95"
-            >
-              <Send size={12} />
-              INVITE WITH EMAIL
-            </button>
-            <div className="h-6 w-px bg-white/10" />
-              <ThemeToggle />
+            {role === "owner" && (
+              <>
+                <button
+                  onClick={() => setIsManageOpen(true)}
+                  className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-indigo-500 active:scale-95"
+                >
+                  <Users size={12} />
+                  MANAGE ACCESS
+                </button>
+                <div className="h-6 w-px bg-white/10" />
+              </>
+            )}
+            <ThemeToggle />
             </div>
         </div>
         {isGuest && (
@@ -279,6 +238,26 @@ export default function BoardPage({
           onShapeDelete={sendShapeDelete}
           canEdit={canEdit}
         />
+        {status !== "online" && (
+          <div className="fixed bottom-20 left-1/2 z-40 -translate-x-1/2 rounded-full border border-amber-500/30 bg-zinc-900/90 px-3 py-1 text-[11px] text-amber-400">
+            {status === "connecting"
+              ? "Connecting…"
+              : "Offline. Reconnecting, editing is paused."}
+          </div>
+        )}
+        {isManageOpen && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60"
+            onClick={() => setIsManageOpen(false)}
+          >
+            <div
+              className="w-96 rounded-2xl border border-black/10 bg-white shadow-2xl dark:border-white/10 dark:bg-zinc-900"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <InviteDialog boardId={boardId} />
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
